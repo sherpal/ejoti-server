@@ -1,2 +1,2 @@
 install:
-  - sbt Ejoti/publishM2
+  - sbt publishM2
