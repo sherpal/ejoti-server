@@ -22,13 +22,17 @@ object WebSocketResponse {
   }
 
   case class AcceptResponse(messageHandling: Queue[Message] => ZIO[Any, Nothing, ZStream[Any, Nothing, Message]])
-      extends WebSocketResponse
+      extends WebSocketResponse {
+    def mapStream(f: ZStream[Any, Nothing, Message] => ZStream[Any, Nothing, Message]) = AcceptResponse(
+      messageHandling(_).map(f)
+    )
+  }
   case class RejectResponse(status: Status[_], reason: String, headers: List[Header]) extends WebSocketResponse
 
   def empty: AcceptResponse = AcceptResponse(_ => ZIO.succeed(ZStream.empty))
 
   def echo: AcceptResponse = AcceptResponse(queue => ZIO.succeed(ZStream.fromQueue(queue)))
   def echoWithLog: AcceptResponse =
-    AcceptResponse(queue => ZIO.succeed(ZStream.fromQueue(queue).tap(message => zio.Console.printLine(message).orDie)))
+    echo.mapStream(_.tap(message => zio.Console.printLine(message).orDie))
 
 }
