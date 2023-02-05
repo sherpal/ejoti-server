@@ -1,9 +1,10 @@
-ThisBuild / version := "0.1.0-SNAPSHOT"
+ThisBuild / version := "0.1.0"
 
 ThisBuild / scalaVersion := "3.2.0"
 
 ThisBuild / scalacOptions ++= List(
-  "-encoding", "utf8", // if an option takes an arg, supply it on the same line
+  "-encoding",
+  "utf8", // if an option takes an arg, supply it on the same line
   "-feature", // then put the next option on a new line for easy editing
   "-language:implicitConversions",
   "-language:existentials",
@@ -15,7 +16,8 @@ ThisBuild / scalacOptions ++= List(
 val circeVersion = "0.14.1"
 ThisBuild / testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
 
-lazy val Ejoti = crossProject(JSPlatform, JVMPlatform).in(file("./ejoti"))
+lazy val Ejoti = crossProject(JSPlatform, JVMPlatform)
+  .in(file("./ejoti"))
   .settings(
     name := "Ejoti",
     testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
@@ -32,7 +34,7 @@ lazy val Ejoti = crossProject(JSPlatform, JVMPlatform).in(file("./ejoti"))
       "org.scalameta" %%% "munit" % "0.7.29" % Test,
       "org.scalacheck" %%% "scalacheck" % "1.17.0" % Test,
       "dev.zio" %%% "zio-test" % "2.0.6" % Test,
-      "dev.zio" %%% "zio-test-sbt"      % "2.0.6" % Test
+      "dev.zio" %%% "zio-test-sbt" % "2.0.6" % Test
     )
   )
 
@@ -45,3 +47,15 @@ lazy val server = (project in file("./server"))
     scalaJSLinkerConfig ~= (_.withModuleKind(ModuleKind.ESModule))
   )
   .dependsOn(Ejoti.js)
+
+val createReleaseTag = taskKey[java.io.File]("Writes the current release tag in tag.txt file")
+
+createReleaseTag := {
+  val file = new java.io.File("tag.txt")
+
+  val currentVersion = (`Ejoti`.jvm / version).value
+  val gitHash        = git.gitHeadCommit.value.toRight(new IllegalStateException("Not a git repo!")).toTry.get.take(8)
+  IO.write(file, s"RELEASE_TAG=$currentVersion-$gitHash")
+
+  file
+}
