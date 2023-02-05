@@ -2,6 +2,7 @@ package ejoti.domain
 
 import zio.Chunk
 import zio.stream.ZStream
+import zio.{Queue, ZIO}
 
 final case class Response(status: Status[Int], headers: List[Header], body: ZStream[Any, Nothing, Chunk[Byte]])
 

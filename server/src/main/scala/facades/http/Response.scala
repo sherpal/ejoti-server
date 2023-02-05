@@ -19,7 +19,7 @@ trait Response extends js.Object {
   def end(body: String): Unit = js.native
 
   def end(): Unit = js.native
-  
+
   def writableEnded: Boolean = js.native
 
 }
@@ -29,6 +29,6 @@ object Response {
     @inline def writeHead(status: Status[Int], headers: List[Header]): res.type =
       res.writeHeadJS(status.code, headers.map(_.keyValue).toMap.toJSDictionary)
 
-    @inline def write(chunk: zio.Chunk[Byte]): Unit = res.writeJS(Uint8Array.from(chunk.toList.toJSArray.map(_.toShort)))
+    @inline def write(chunk: zio.Chunk[Byte]): Unit = res.writeJS(chunkToUint8Array(chunk))
   }
 }

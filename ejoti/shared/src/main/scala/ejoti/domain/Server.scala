@@ -8,7 +8,7 @@ import zio.ZIO
   */
 trait Server[-R, Req, Res] {
 
-  def handlerRequest(req: Req): ZIO[R, Nothing, Res]
+  def handleRequest(req: Req): ZIO[R, Nothing, Res]
 
   def attachMiddleware[R0 <: R, NewRes, NewReq](
       middleware: Middleware[R0, Req, Res, NewReq, NewRes]
@@ -20,7 +20,7 @@ object Server {
   type RawServer[R] = Server[R, Request.RawRequest, Response]
 
   case class FromFunctionZIO[R, Req, Res](handler: Req => ZIO[R, Nothing, Res]) extends Server[R, Req, Res] {
-    override def handlerRequest(req: Req): ZIO[R, Nothing, Res] = handler(req)
+    override def handleRequest(req: Req): ZIO[R, Nothing, Res] = handler(req)
   }
 
   def fromFunctionZIO[R, Req, Res](handler: Req => ZIO[R, Nothing, Res]): Server[R, Req, Res] = FromFunctionZIO(handler)
@@ -36,8 +36,8 @@ object Server {
       server: Server[R, Req, Res],
       middleware: Middleware[R, Req, Res, NewReq, NewRes]
   ) extends Server[R, NewReq, NewRes] {
-    override def handlerRequest(req: NewReq): ZIO[R, Nothing, NewRes] =
-      middleware.transform(server.handlerRequest)(req)
+    override def handleRequest(req: NewReq): ZIO[R, Nothing, NewRes] =
+      middleware.transform(server.handleRequest)(req)
   }
 
 }

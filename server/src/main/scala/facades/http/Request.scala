@@ -7,10 +7,11 @@ import zio.{Chunk, ZIO}
 
 import scala.scalajs.js
 import scala.scalajs.js.typedarray.Uint8Array
-import scala.scalajs.js.typedarray.TypedArrayBuffer
+import scala.scalajs.js.annotation.JSName
+import facades.node.EventEmitter
 
 @js.native
-trait Request extends js.Object {
+trait Request extends EventEmitter {
 
   def method: String = js.native
 
@@ -21,8 +22,6 @@ trait Request extends js.Object {
   def protocol: String | Unit = js.native
 
   def rawHeaders: js.Array[String] = js.native
-
-  def on[Data <: js.Any](name: String, handler: js.Function1[Data, Unit]): Unit = js.native
 
   def writableEnded: Boolean = js.native
 
@@ -36,10 +35,13 @@ object Request {
   extension (req: Request) {
     def onChunk(handler: Chunk[Byte] => Unit): Unit = req.on[Uint8Array](
       "data",
-      (chunk: Uint8Array) => handler(Chunk.fromByteBuffer(TypedArrayBuffer.wrap(chunk.buffer)))
+      (chunk: Uint8Array) => handler(uint8ArrayToChunk(chunk))
     )
 
     def onEnd(body: => Unit): Unit = req.on[js.Any]("end", (_: js.Any) => body)
+
+    def onUpgrade(handler: (Response, Socket, Uint8Array) => Unit): Unit =
+      req.on3[Response, Socket, Uint8Array]("upgrade", handler)
 
     def bodyStream: ZIO[Any, Nothing, ZStream[Any, Nothing, Byte]] = for {
       queue   <- zio.Queue.unbounded[Chunk[Byte]]
@@ -49,7 +51,6 @@ object Request {
     } yield zio.stream.ZStream.fromChunkQueue(queue)
 
     def toEjotiRequest: ZIO[Any, Nothing, ejoti.domain.Request.RawRequest] = for {
-      _      <- ZIO.succeed(facades.console.console.log(req))
       body   <- bodyStream
       method <- ejoti.domain.HttpMethod.fromStringZIO(req.method)
       headers <- ZIO.foreach(
@@ -62,9 +63,7 @@ object Request {
           .toVector
       )(Header.fromKeyValuePairZIO)
       host <- ZIO
-        .from(headers.collectFirst { case Header.Host(host) =>
-          host
-        })
+        .from(headers.collectFirst { case Header.Host(host) => host })
         .orElseFail(new IllegalStateException(s"No host header"))
         .orDie
       urlStringParser <- ZIO.succeed(urlStringParserGenerator.parser(s"http://$host${req.url}"))

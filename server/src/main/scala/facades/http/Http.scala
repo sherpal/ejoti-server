@@ -35,9 +35,7 @@ object Http {
         runtime.unsafe.runToFuture((for {
           request  <- jsRequest.toEjotiRequest
           response <- handler(request)
-          _        <- ZIO.succeed(jsResponse.writeHead(response.status, response.headers))
-          _        <- response.body.runForeach(chunk => ZIO.succeed(jsResponse.write(chunk)))
-          _        <- ZIO.succeed(jsResponse.end())
+          _        <- handleNodeResponseFromEjotiResponse(jsResponse, response)
         } yield ()).catchAllCause { (cause: Cause[Throwable]) =>
           ZIO.succeed {
             val message = cause.prettyPrint
@@ -57,7 +55,7 @@ object Http {
     }
 
     def createServerZIO[R](server: ejoti.domain.Server.RawServer[R]): ZIO[R, Nothing, Server] = createServerZIO(
-      server.handlerRequest
+      server.handleRequest
     )
   }
 

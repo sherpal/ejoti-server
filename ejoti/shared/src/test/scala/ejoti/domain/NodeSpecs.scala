@@ -27,7 +27,7 @@ object NodeSpecs extends ZIOSpecDefault {
           .fillOutlet[0](helloPath)
           .fillOutlet[0](Node.okString)
 
-        val program = serverTree.asServer.handlerRequest(
+        val program = serverTree.asServer.handleRequest(
           TestRequest.fromBodyString("body").withSegments(Segment("hello"))
         )
 
@@ -94,23 +94,23 @@ object NodeSpecs extends ZIOSpecDefault {
 
         for {
           postMessage <- server
-            .handlerRequest(TestRequest.fromMethod(HttpMethod.POST))
+            .handleRequest(TestRequest.fromMethod(HttpMethod.POST))
             .flatMap(_.body.runCollect)
             .map(_.flatten.asString)
           getMessage <- server
-            .handlerRequest(TestRequest.fromMethod(HttpMethod.GET))
+            .handleRequest(TestRequest.fromMethod(HttpMethod.GET))
             .flatMap(_.body.runCollect)
             .map(_.flatten.asString)
           patchMessage <- server
-            .handlerRequest(TestRequest.fromMethod(HttpMethod.PATCH))
+            .handleRequest(TestRequest.fromMethod(HttpMethod.PATCH))
             .flatMap(_.body.runCollect)
             .map(_.flatten.asString)
           deleteMessage <- server
-            .handlerRequest(TestRequest.fromMethod(HttpMethod.DELETE))
+            .handleRequest(TestRequest.fromMethod(HttpMethod.DELETE))
             .flatMap(_.body.runCollect)
             .map(_.flatten.asString)
           optionsMessage <- server
-            .handlerRequest(TestRequest.fromMethod(HttpMethod.OPTIONS))
+            .handleRequest(TestRequest.fromMethod(HttpMethod.OPTIONS))
             .flatMap(_.body.runCollect)
             .map(_.flatten.asString)
         } yield assertTrue(
@@ -201,17 +201,17 @@ object NodeSpecs extends ZIOSpecDefault {
 
         for {
           createRequest  <- ZIO.succeed(baseRequest.withMethod(HttpMethod.POST).withStreamBodyAsString("my-data"))
-          createResponse <- server.handlerRequest(createRequest)
+          createResponse <- server.handleRequest(createRequest)
           getRequest     <- ZIO.succeed(baseRequest)
-          getResponse    <- server.handlerRequest(getRequest).flatMap(_.body.runCollect).map(_.flatten.asString)
+          getResponse    <- server.handleRequest(getRequest).flatMap(_.body.runCollect).map(_.flatten.asString)
           patchRequest  <- ZIO.succeed(baseRequest.withMethod(HttpMethod.PATCH).withStreamBodyAsString("my-other-data"))
-          patchResponse <- server.handlerRequest(patchRequest)
+          patchResponse <- server.handleRequest(patchRequest)
           wrongPatchRequest  <- ZIO.succeed(wrongBaseRequest.withMethod(HttpMethod.PATCH).withStreamBodyAsString("meh"))
-          wrongPatchResponse <- server.handlerRequest(wrongPatchRequest)
-          getResponse2       <- server.handlerRequest(getRequest).flatMap(_.body.runCollect).map(_.flatten.asString)
+          wrongPatchResponse <- server.handleRequest(wrongPatchRequest)
+          getResponse2       <- server.handleRequest(getRequest).flatMap(_.body.runCollect).map(_.flatten.asString)
           deleteRequest      <- ZIO.succeed(baseRequest.withMethod(HttpMethod.DELETE))
-          deleteResponse     <- server.handlerRequest(deleteRequest)
-          getResponse3       <- server.handlerRequest(getRequest)
+          deleteResponse     <- server.handleRequest(deleteRequest)
+          getResponse3       <- server.handleRequest(getRequest)
         } yield assertTrue(
           createResponse.status.code     == 200,
           getResponse                    == "my-data",

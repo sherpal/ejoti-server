@@ -13,6 +13,8 @@ object Header {
   case class Host(host: String) extends Header("Host", host)
   case class Connection(tpe: String) extends Header("Connection", tpe)
   case class ContentLength(length: Long) extends Header("Content-Length", length.toString)
+  case class Origin(value: String) extends Header("Origin", value)
+  case class Upgrade(value: String) extends Header("Upgrade", value)
   case class UserAgent(name: String) extends Header("User-Agent", name)
 
   case class RawHeader(name: String, value: String) extends Header(name, value)
@@ -22,13 +24,20 @@ object Header {
     "content-type"   -> ContentType.apply,
     "host"           -> Host.apply,
     "content-length" -> ContentLength.apply.compose(_.toLong),
-    "user-agent"     -> UserAgent.apply
+    "user-agent"     -> UserAgent.apply,
+    "upgrade"        -> Upgrade.apply,
+    "origin"         -> Origin.apply
   )
 
   def fromKeyValuePairZIO(name: String, value: String): ZIO[Any, Nothing, Header] =
-    ZIO.succeed(nameToDomain.getOrElse({
-      import scala.language.unsafeNulls
-      name.toLowerCase
-    }, RawHeader(name, _))(value))
+    ZIO.succeed(
+      nameToDomain.getOrElse(
+        {
+          import scala.language.unsafeNulls
+          name.toLowerCase
+        },
+        RawHeader(name, _)
+      )(value)
+    )
 
 }

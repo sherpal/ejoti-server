@@ -18,6 +18,7 @@ import urldsl.url.UrlStringParserGenerator
 import CollectedInfo.given
 import ejoti.domain.HttpMethod.*
 import urldsl.vocabulary.Segment
+import java.net.http.HttpResponse.ResponseInfo
 
 trait Node[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple] {
   self =>
@@ -29,10 +30,15 @@ trait Node[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple] {
   import Node.given
 
   def asServer(using
-      ev: (Choices[X] | Exit) =:= ExitType,
+      ev: (Choices[X] | Exit) =:= Response,
       inIsRawRequest: Conversion[CollectedInfo[Singleton[RawRequest]], CollectedInfo[IncomingInfo]]
   ): Server.RawServer[R] =
     Server.fromFunctionZIO[R, RawRequest, Response](request => out(CollectedInfo.empty + request).map(ev))
+
+  def asWebSocketServer(using
+      ev: (Choices[X] | Exit) <:< WebSocketResponse,
+      inIsRawRequest: Conversion[CollectedInfo[Singleton[RawRequest]], CollectedInfo[IncomingInfo]]
+  ): WebSocketServer[R] = request => out(CollectedInfo.empty + request).map(ev)
 
   def out(collectedInfo: CollectedInfo[IncomingInfo]): ZIO[R, Nothing, Choices[X] | Exit]
 
@@ -150,7 +156,7 @@ object Node {
   type Singleton[X]                = X *: EmptyTuple
   type Pair[X, Y]                  = X *: Y *: EmptyTuple
 
-  type ExitType = Response
+  type ExitType = Response | WebSocketResponse
 
   given Typeable[Nothing] = (_: Any) => None
 
@@ -276,20 +282,20 @@ object Node {
       ValueOf[CollectedInfo.IndexOf[RawRequest, In *: RawRequest *: EmptyTuple]]
   ): Node[Any, Left *: Right *: EmptyTuple, Nothing, In *: RawRequest *: EmptyTuple] = EitherNode(f)
 
-  final class FailingEitherNode[T, In](f: In => ZIO[Any, Nothing, Either[ExitType, T]])
-      extends Node[Any, T *: EmptyTuple, ExitType, In *: EmptyTuple] {
-    def out(collectedInfo: CollectedInfo[In *: EmptyTuple]): ZIO[Any, Nothing, Value[T, 0] | ExitType] =
+  final class FailingEitherNode[T, In, Exit <: ExitType](f: In => ZIO[Any, Nothing, Either[Exit, T]])
+      extends Node[Any, T *: EmptyTuple, Exit, In *: EmptyTuple] {
+    def out(collectedInfo: CollectedInfo[In *: EmptyTuple]): ZIO[Any, Nothing, Value[T, 0] | Exit] =
       f(collectedInfo.access[In]).map {
         case Left(value)  => value
         case Right(value) => Value[T, 0](value, 0)
       }
   }
 
-  def failingEitherNode[T, In](
-      f: In => ZIO[Any, Nothing, Either[ExitType, T]]
-  ): Node[Any, T *: EmptyTuple, ExitType, In *: EmptyTuple] = new FailingEitherNode(f)
+  def failingEitherNode[T, In, Exit <: ExitType](
+      f: In => ZIO[Any, Nothing, Either[Exit, T]]
+  ): Node[Any, T *: EmptyTuple, Exit, In *: EmptyTuple] = new FailingEitherNode(f)
 
-  def leaf[R, In](f: In => ZIO[R, Nothing, ExitType]): Node[R, EmptyTuple, ExitType, Singleton[In]] =
+  def leaf[R, In, Exit <: ExitType](f: In => ZIO[R, Nothing, Exit]): Node[R, EmptyTuple, Exit, Singleton[In]] =
     (in: CollectedInfo[Singleton[In]]) => f(in.access[In])
 
   final class MappingNode[T, U](f: T => U) extends Node[Any, U *: EmptyTuple, Nothing, T *: EmptyTuple] {
@@ -311,7 +317,7 @@ object Node {
   def singletonIdentityNode[In]: Node[Any, CollectedInfo[Singleton[In]] *: EmptyTuple, Nothing, Singleton[In]] =
     identityNode[Singleton[In]]
 
-  def addJsonNode[T](using Decoder[T]): Node[Any, Singleton[T], ExitType, Singleton[RawRequest]] =
+  def addJsonNode[T](using Decoder[T]): Node[Any, Singleton[T], Response, Singleton[RawRequest]] =
     failingEitherNode { (request: RawRequest) =>
       request.bodyAsString
         .map(decode[T](_))
@@ -341,7 +347,7 @@ object Node {
   val decodeBodyAsString: Node[Any, Singleton[Request[String]], Nothing, Singleton[RawRequest]] =
     (in: CollectedInfo[Singleton[RawRequest]]) => in.access[RawRequest].withBodyAsString.map(Value(_, 0))
 
-  private def leafFromResponse(response: => Response): Node[Any, EmptyTuple, ExitType, Unit *: EmptyTuple] =
+  private def leafFromResponse(response: => Response): Node[Any, EmptyTuple, Response, Unit *: EmptyTuple] =
     leaf(_ => ZIO.succeed(response))
 
   val ok               = leafFromResponse(Response.Ok)
@@ -370,10 +376,10 @@ object Node {
       )
   }
 
-  object CrudNode extends Node[Any, HttpMethod.CRUD, ExitType, Singleton[RawRequest]] {
+  object CrudNode extends Node[Any, HttpMethod.CRUD, Response, Singleton[RawRequest]] {
     def out(
         collectedInfo: CollectedInfo[Singleton[RawRequest]]
-    ): ZIO[Any, Nothing, Choices[HttpMethod.CRUD] | ExitType] = ZIO.succeed {
+    ): ZIO[Any, Nothing, Choices[HttpMethod.CRUD] | Response] = ZIO.succeed {
       collectedInfo.access[RawRequest].method match {
         case POST   => Value[POST, 0](POST, 0)
         case GET    => Value[GET, 1](GET, 1)
@@ -384,6 +390,6 @@ object Node {
     }
   }
 
-  def crudNode: Node[Any, HttpMethod.CRUD, ExitType, Singleton[RawRequest]] = CrudNode
+  def crudNode: Node[Any, HttpMethod.CRUD, Response, Singleton[RawRequest]] = CrudNode
 
 }
