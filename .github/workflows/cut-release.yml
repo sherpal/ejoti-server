@@ -26,7 +26,8 @@ jobs:
   release:
     needs: [tests]
     runs-on: ubuntu-latest
-
+    permissions: read-all
+    
     steps:
       - uses: actions/checkout@v2
       - name: Set up JDK 11
