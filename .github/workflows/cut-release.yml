@@ -27,7 +27,7 @@ jobs:
     needs: [tests]
     runs-on: ubuntu-latest
     permissions: read-all
-    
+
     steps:
       - uses: actions/checkout@v2
       - name: Set up JDK 11
@@ -45,7 +45,7 @@ jobs:
         id: create_release
         uses: actions/create-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CUT_RELEASE }}
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           release_name: "Ejoti Server"
@@ -53,6 +53,6 @@ jobs:
           prerelease: false
       - uses: eregon/publish-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CUT_RELEASE }}
         with:
           release_id: ${{ steps.create_release.outputs.id }}
