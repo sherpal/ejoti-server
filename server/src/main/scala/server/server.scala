@@ -12,6 +12,7 @@ import ejoti.domain.CollectedInfo.given
 import scala.scalajs.js
 import zio.{Unsafe, ZIO}
 import facades.websocket.{Connection, WebSocketRequest, WebSocketServer}
+import fs2.io.file.Path
 
 // Invoke-WebRequest -Uri http://localhost:3000/hello/stuff?hey=3 -Method POST -Body "hi"
 // Example http server
@@ -21,7 +22,6 @@ import facades.websocket.{Connection, WebSocketRequest, WebSocketServer}
 
   val helloPath = navigation
     .pathPrefix(root / "hello")
-    .fillOutlet[0](notFound)
 
   val step1 = Node.decodeBodyAsString
   val step2 = step1.fillOutlet[0](mappingNode((req: Request[String]) => s"You sent me: ${req.body}"))
@@ -29,7 +29,9 @@ import facades.websocket.{Connection, WebSocketRequest, WebSocketServer}
   val step4 = step3.fillOutlet[0](printRequest)
   val step5 = step4.fillOutlet[0](Node.okString)
 
-  val serverTree = step5
+  val helloPathFilled = helloPath.fillOutlet[1](step5)
+
+  val serverTree = helloPathFilled.fillOutlet[0](Node.sendFixedFile(Path("./test.txt")))
 
   val webSocketServer = Node.leaf((req: Request.RawRequest) => ZIO.succeed(WebSocketResponse.echoWithLog))
 

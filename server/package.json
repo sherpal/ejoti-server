@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "dev": "nodemon ./target/scala-3.2.0/server-fastopt/main.js",
+    "dev": "nodemon --enable-source-maps ./target/scala-3.2.0/server-fastopt/main.js",
     "prod": "node ./server/main.js"
   },
   "type": "module",
@@ -9,6 +9,7 @@
     "nodemon": "2.0.20"
   },
   "dependencies": {
+    "source-map-support": "^0.5.21",
     "websocket": "1.0.34"
   }
 }

@@ -19,6 +19,8 @@ import CollectedInfo.given
 import ejoti.domain.HttpMethod.*
 import urldsl.vocabulary.Segment
 import java.net.http.HttpResponse.ResponseInfo
+import ejoti.domain.nodeast.*
+import fs2.io.file.Path
 
 trait Node[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple] {
   self =>
@@ -115,7 +117,7 @@ trait Node[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple] {
         CollectedInfo.IndexesOf[IncomingInfo, Proof *: IncomingInfo]
       ] =:= IncomingInfo
   ): Node[R, X, Exit, Proof *: IncomingInfo] =
-    Node.NodeWithProof(this)
+    NodeWithProof(this)
 
   final def provide[AdditionalInfo <: Tuple](using
       ValueOf[CollectedInfo.IndexesOf[IncomingInfo, AdditionalInfo ::: IncomingInfo]],
@@ -135,7 +137,7 @@ trait Node[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple] {
     CollectedInfo.MappedCollectedInfo[X, AdditionalInfo],
     Exit,
     AdditionalInfo ::: IncomingInfo
-  ] = Node.ProvidedNode(this)
+  ] = ProvidedNode(this)
 
 }
 
@@ -184,91 +186,15 @@ object Node {
     case x *: xs    => Tuple.Elem[x *: xs, Idx]
   }
 
-  final class NodeFromValue[Info](val info: Info) extends Node[Any, Singleton[Info], Nothing, EmptyTuple] {
-    def out(collectedInfo: CollectedInfo.Empty) = ZIO.succeed(Value[Info, 0](info, 0))
-  }
-
   def fromValue[Info](info: Info): Node[Any, Singleton[Info], Nothing, EmptyTuple] = new NodeFromValue(info)
-
-  final class NodeWithProof[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple, Proof](
-      val node: Node[R, X, Exit, IncomingInfo]
-  )(using
-      ValueOf[CollectedInfo.IndexesOf[IncomingInfo, Proof *: IncomingInfo]],
-      CollectedInfo.Elems[
-        Proof *: IncomingInfo,
-        CollectedInfo.IndexesOf[IncomingInfo, Proof *: IncomingInfo]
-      ] =:= IncomingInfo
-  ) extends Node[R, X, Exit, Proof *: IncomingInfo] {
-    def out(collectedInfo: CollectedInfo[Proof *: IncomingInfo]) = node.out(collectedInfo)
-  }
-
-  final class ProvidedNode[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple, AdditionalInfo <: Tuple](
-      val node: Node[R, X, Exit, IncomingInfo]
-  )(using
-      ValueOf[CollectedInfo.IndexesOf[IncomingInfo, AdditionalInfo ::: IncomingInfo]],
-      ValueOf[CollectedInfo.IndexesOf[AdditionalInfo, AdditionalInfo ::: IncomingInfo]],
-      CollectedInfo.Elems[
-        AdditionalInfo ::: IncomingInfo,
-        CollectedInfo.IndexesOf[IncomingInfo, AdditionalInfo ::: IncomingInfo]
-      ] =:= IncomingInfo,
-      CollectedInfo.Elems[
-        AdditionalInfo ::: IncomingInfo,
-        CollectedInfo.IndexesOf[AdditionalInfo, AdditionalInfo ::: IncomingInfo]
-      ] =:= AdditionalInfo,
-      ValueOf[Tuple.Size[X]],
-      Typeable[Exit]
-  ) extends Node[
-        R,
-        CollectedInfo.MappedCollectedInfo[X, AdditionalInfo],
-        Exit,
-        AdditionalInfo ::: IncomingInfo
-      ] {
-    def out(
-        collectedInfo: CollectedInfo[AdditionalInfo ::: IncomingInfo]
-    ): ZIO[R, Nothing, Choices[CollectedInfo.MappedCollectedInfo[X, AdditionalInfo]] | Exit] =
-      node.out(collectedInfo).map {
-        case exit: Exit => exit
-        case choice: Choices[X] @unchecked =>
-          collectedInfo.subset[AdditionalInfo].toPolymorphicFunction[X].mapChoice(choice)
-      }
-  }
-
-  final class PolymorphicMappedNode[-R, X1 <: Tuple, X2 <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple](
-      val node: Node[R, X1, Exit, IncomingInfo],
-      val f: PolymorphicFunction[X1, X2]
-  )(using Typeable[Exit])
-      extends Node[R, X2, Exit, IncomingInfo] {
-    override def out(collectedInfo: CollectedInfo[IncomingInfo]): ZIO[R, Nothing, Choices[X2] | Exit] =
-      node.out(collectedInfo).map {
-        case exit: Exit                    => exit
-        case value: Choices[X1] @unchecked => f.mapChoice(value)
-      }
-  }
 
   type Example1 = String *: Double *: EmptyTuple
   summon[Choices[Example1] =:= (Value[String, 0] | Value[Double, 1])]
   summon[Choices[EmptyTuple] =:= Nothing]
 
-  final class SideEffectNode[-R, In <: Tuple](effect: CollectedInfo[In] => ZIO[R, Nothing, Unit])
-      extends Node[R, Singleton[Unit], Nothing, In] {
-    def out(in: CollectedInfo[In]): ZIO[R, Nothing, Value[Unit, 0]] = effect(in).map(Value(_, 0))
-  }
-
   def sideEffectNode[R, In <: Tuple](
       effect: CollectedInfo[In] => ZIO[R, Nothing, Unit]
   ): Node[R, Singleton[Unit], Nothing, In] = new SideEffectNode(effect)
-
-  final class EitherNode[Left, Right, In](f: (In, RawRequest) => Either[Left, Right])(using
-      ValueOf[CollectedInfo.IndexOf[RawRequest, In *: RawRequest *: EmptyTuple]]
-  ) extends Node[Any, Left *: Right *: EmptyTuple, Nothing, In *: RawRequest *: EmptyTuple] {
-    def out(
-        collectedInfo: CollectedInfo[In *: RawRequest *: EmptyTuple]
-    ): ZIO[Any, Nothing, Value[Left, 0] | Value[Right, 1]] =
-      ZIO.succeed(f(collectedInfo.access[In], collectedInfo.access[RawRequest]) match {
-        case Left(left)   => Value[Left, 0](left, 0)
-        case Right(right) => Value[Right, 1](right, 1)
-      })
-  }
 
   def eitherNode[Left, Right, In](
       f: In => Either[Left, Right]
@@ -282,15 +208,6 @@ object Node {
       ValueOf[CollectedInfo.IndexOf[RawRequest, In *: RawRequest *: EmptyTuple]]
   ): Node[Any, Left *: Right *: EmptyTuple, Nothing, In *: RawRequest *: EmptyTuple] = EitherNode(f)
 
-  final class FailingEitherNode[T, In, Exit <: ExitType](f: In => ZIO[Any, Nothing, Either[Exit, T]])
-      extends Node[Any, T *: EmptyTuple, Exit, In *: EmptyTuple] {
-    def out(collectedInfo: CollectedInfo[In *: EmptyTuple]): ZIO[Any, Nothing, Value[T, 0] | Exit] =
-      f(collectedInfo.access[In]).map {
-        case Left(value)  => value
-        case Right(value) => Value[T, 0](value, 0)
-      }
-  }
-
   def failingEitherNode[T, In, Exit <: ExitType](
       f: In => ZIO[Any, Nothing, Either[Exit, T]]
   ): Node[Any, T *: EmptyTuple, Exit, In *: EmptyTuple] = new FailingEitherNode(f)
@@ -298,18 +215,8 @@ object Node {
   def leaf[R, In, Exit <: ExitType](f: In => ZIO[R, Nothing, Exit]): Node[R, EmptyTuple, Exit, Singleton[In]] =
     (in: CollectedInfo[Singleton[In]]) => f(in.access[In])
 
-  final class MappingNode[T, U](f: T => U) extends Node[Any, U *: EmptyTuple, Nothing, T *: EmptyTuple] {
-    def out(in: CollectedInfo[T *: EmptyTuple]): ZIO[Any, Nothing, Value[U, 0]] =
-      ZIO.succeed(Value(f(in.access[T]), 0))
-  }
-
   def mappingNode[T, U](f: T => U): Node[Any, U *: EmptyTuple, Nothing, T *: EmptyTuple] =
     MappingNode(f)
-
-  final class IdentityNode[Incoming <: Tuple]
-      extends Node[Any, CollectedInfo[Incoming] *: EmptyTuple, Nothing, Incoming] {
-    def out(in: CollectedInfo[Incoming]) = ZIO.succeed(Value[CollectedInfo[Incoming], 0](in, 0))
-  }
 
   def identityNode[Incoming <: Tuple]: Node[Any, CollectedInfo[Incoming] *: EmptyTuple, Nothing, Incoming] =
     new IdentityNode[Incoming]
@@ -376,20 +283,11 @@ object Node {
       )
   }
 
-  object CrudNode extends Node[Any, HttpMethod.CRUD, Response, Singleton[RawRequest]] {
-    def out(
-        collectedInfo: CollectedInfo[Singleton[RawRequest]]
-    ): ZIO[Any, Nothing, Choices[HttpMethod.CRUD] | Response] = ZIO.succeed {
-      collectedInfo.access[RawRequest].method match {
-        case POST   => Value[POST, 0](POST, 0)
-        case GET    => Value[GET, 1](GET, 1)
-        case PATCH  => Value[PATCH, 2](PATCH, 2)
-        case DELETE => Value[DELETE, 3](DELETE, 3)
-        case _      => Response.MethodNotAllowed
-      }
-    }
-  }
-
   def crudNode: Node[Any, HttpMethod.CRUD, Response, Singleton[RawRequest]] = CrudNode
+
+  def sendFile(chunkSize: Int = 8 * 1024): FileDownloadNode = new FileDownloadNode(chunkSize)
+
+  def sendFixedFile(path: Path, chunkSize: Int = 8 * 1024): Node[Any, EmptyTuple, Response, EmptyTuple] =
+    fromValue(path).fillOutlet[0](sendFile(chunkSize))
 
 }

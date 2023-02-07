@@ -24,6 +24,7 @@ lazy val Ejoti = crossProject(JSPlatform, JVMPlatform)
     libraryDependencies ++= List(
       "dev.zio" %%% "zio" % "2.0.5",
       "dev.zio" %%% "zio-streams" % "2.0.5",
+      "dev.zio" %%% "zio-interop-cats" % "23.0.0.1",
       "be.doeraene" %%% "url-dsl" % "0.5.0",
       "io.github.cquiroz" %%% "scala-java-time" % "2.4.0"
     ) ++ List(
@@ -35,6 +36,17 @@ lazy val Ejoti = crossProject(JSPlatform, JVMPlatform)
       "org.scalacheck" %%% "scalacheck" % "1.17.0" % Test,
       "dev.zio" %%% "zio-test" % "2.0.6" % Test,
       "dev.zio" %%% "zio-test-sbt" % "2.0.6" % Test
+    )
+  )
+  .jsSettings(
+    resolvers ++= Resolver.sonatypeOssRepos("snapshots"),
+    libraryDependencies ++= List(
+      "co.fs2" %%% "fs2-io" % "3.5.0-43-87fccf7-SNAPSHOT"
+    )
+  )
+  .jvmSettings(
+    libraryDependencies ++= List(
+      "co.fs2" %% "fs2-io" % "3.5.0"
     )
   )
 
