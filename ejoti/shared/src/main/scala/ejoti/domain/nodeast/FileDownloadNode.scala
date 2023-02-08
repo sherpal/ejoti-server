@@ -18,11 +18,17 @@ final class FileDownloadNode(chunkSize: Int = 8 * 1024) extends Node[Any, EmptyT
   def out(collectedInfo: CollectedInfo[Singleton[Path]]): ZIO[Any, Nothing, Response] = {
     val path = collectedInfo.access[Path]
 
-    val filesBytes: Stream[IO, Byte] = files.readAll(path, chunkSize, Flags.Read)
-    val zFilesBytes                  = filesBytes.toZStream().grouped(chunkSize)
+    val filesBytes: Stream[IO, fs2.Chunk[Byte]] = files.readAll(path, chunkSize, Flags.Read).chunks
+    val zFilesBytes                             = filesBytes.toZStream()
 
     ZIO.ifZIO(files.exists(path).orDie)(
-      ZIO.succeed(Response(Status.Ok, List(FileDownloadNode.contentTypeFromExt(path)), zFilesBytes.orDie)),
+      ZIO.succeed(
+        Response(
+          Status.Ok,
+          List(FileDownloadNode.contentTypeFromExt(path)),
+          zFilesBytes.map(chunk => zio.Chunk.fromArray(chunk.toArray)).orDie
+        )
+      ),
       ZIO.succeed(Response.NotFound)
     )
 

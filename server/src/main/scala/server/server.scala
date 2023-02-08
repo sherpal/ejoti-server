@@ -36,16 +36,8 @@ import fs2.io.file.Flags
 
   val webSocketServer = Node.leaf((req: Request.RawRequest) => ZIO.succeed(WebSocketResponse.echoWithLog))
 
-  val app = for {
-    server <- http.createServerZIO(serverTree.asServer)
-    _      <- server.listenZIO(3000)(ZIO.succeed(println("I'm on!")))
-    _ <- WebSocketServer.fromEjotiWebSocketServer(
-      server,
-      webSocketServer.asWebSocketServer,
-      autoAcceptConnections = false
-    )
-    _ <- ZIO.never
-  } yield ()
+  val app =
+    ejoti.createServer(3000)(serverTree.asServer, ZIO.succeed(println("I'm on!")), webSocketServer.asWebSocketServer)
 
   Unsafe.unsafe(implicit unsafe => zio.Runtime.default.unsafe.runToFuture(app))
   ()
