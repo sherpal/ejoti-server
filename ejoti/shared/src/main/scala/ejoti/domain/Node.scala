@@ -69,41 +69,31 @@ trait Node[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple] {
         ValueOf[Tuple.Size[Y]]
     ): Node[R0, Tuple.Take[X, Idx] ::: CollectedInfo.MappedCollectedInfo[Y, CollectedInfo.LiftedToCollectedInfo[
       ElemOrNothing[X, Idx]
-    ]] ::: Tuple.Drop[X, Idx + 1], Exit | Exit1, IncomingInfo] =
-      new Node[R0, Tuple.Take[X, Idx] ::: CollectedInfo.MappedCollectedInfo[Y, CollectedInfo.LiftedToCollectedInfo[
-        ElemOrNothing[X, Idx]
-      ]] ::: Tuple.Drop[X, Idx + 1], Exit | Exit1, IncomingInfo] {
-        type Out =
-          Choices[Tuple.Take[X, Idx] ::: CollectedInfo.MappedCollectedInfo[Y, CollectedInfo.LiftedToCollectedInfo[
-            ElemOrNothing[X, Idx]
-          ]] ::: Tuple.Drop[X, Idx + 1]]
+    ]] ::: Tuple.Drop[X, Idx + 1], Exit | Exit1, IncomingInfo] = new OutletFilledNode(self, that)
 
-        def out(collectedInfo: CollectedInfo[IncomingInfo]): ZIO[R0, Nothing, Out | Exit | Exit1] =
-          self.out(collectedInfo).flatMap {
-            case o: Exit => ZIO.succeed(o)
-            case other: Choices[X] @unchecked =>
-              other.idx match {
-                case i if i == idx =>
-                  val otherTyped = other.value.asInstanceOf[ElemOrNothing[X, Idx]]
-                  that.out(collectedInfo.flattenedConcat(otherTyped)).map {
-                    case o: Exit1 => o
-                    case other: Choices[Y] @unchecked =>
-                      val mappedOther =
-                        CollectedInfo.liftToCollectedInfo(otherTyped).toPolymorphicFunction[Y].mapChoice(other)
-                      Value(
-                        mappedOther.value,
-                        mappedOther.idx + idx
-                      )
-                        .asInstanceOf[Out]
-                  }
-                case i if i < idx =>
-                  ZIO.succeed(Value(other.value, other.idx).asInstanceOf[Out])
-                case _ =>
-                  ZIO
-                    .succeed(Value(other.value, other.idx + summon[ValueOf[Tuple.Size[Y]]].value - 1).asInstanceOf[Out])
-              }
-          }
-      }
+    /** !DO NOT USE!
+      *
+      * This function allows you to use metals (or IJ when it will be ready) to discover in a practical way the missing
+      * dependencies that `this` node has to be able to be filled by `that`.
+      *
+      * If you are confused by the error messages, you can put somewhere:
+      * {{{
+      *   val x = myNode.fillOutlet[SomeIdx].missingDependencies(myOtherNode)
+      * }}}
+      *
+      * then put your mouse on x and you will see all missing dependencies, that must either be provided in the
+      * IncomingInfo of myNode (you can use the provide method for that). Seeing EmptyTuple means that myOtherNode can
+      * be used to fill the outlet SomeIdx of myNode.
+      *
+      * @param that
+      * @return
+      */
+    def missingDependencies[R0 <: R, Y <: Tuple, Exit1 <: ExitType, IncomingInfo1 <: Tuple](
+        that: Node[R0, Y, Exit1, IncomingInfo1]
+    ): CollectedInfo.ElemsNotIn[
+      IncomingInfo1,
+      CollectedInfo.FlattenedConcat[IncomingInfo, ElemOrNothing[X, Idx]]
+    ] = ???
   }
 
   final def fillOutlet[Idx <: Int](using ValueOf[Idx]): OutletFiller[Idx] = new OutletFiller[Idx]()

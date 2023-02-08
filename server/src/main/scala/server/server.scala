@@ -13,6 +13,7 @@ import scala.scalajs.js
 import zio.{Unsafe, ZIO}
 import facades.websocket.{Connection, WebSocketRequest, WebSocketServer}
 import fs2.io.file.Path
+import fs2.io.file.Flags
 
 // Invoke-WebRequest -Uri http://localhost:3000/hello/stuff?hey=3 -Method POST -Body "hi"
 // Example http server
@@ -31,7 +32,7 @@ import fs2.io.file.Path
 
   val helloPathFilled = helloPath.fillOutlet[1](step5)
 
-  val serverTree = helloPathFilled.fillOutlet[0](Node.sendFixedFile(Path("./test.txt")))
+  val serverTree = helloPathFilled.fillOutlet[0](Node.sendFixedFile(Path("./test.txt"), 64 * 1024))
 
   val webSocketServer = Node.leaf((req: Request.RawRequest) => ZIO.succeed(WebSocketResponse.echoWithLog))
 
