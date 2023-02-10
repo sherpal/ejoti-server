@@ -25,7 +25,8 @@ import fs2.io.file.Path
 trait Node[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple] {
   self =>
 
-  def numberOfOutlets(using value: ValueOf[Tuple.Size[X]]): Int = value.value
+  type NumberOfOutlets = Tuple.Size[X]
+  def numberOfOutlets(using value: ValueOf[NumberOfOutlets]): Int = value.value
 
   type Outlet[Idx <: Int] = ElemOrNothing[X, Idx]
 
@@ -94,6 +95,10 @@ trait Node[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple] {
       IncomingInfo1,
       CollectedInfo.FlattenedConcat[IncomingInfo, ElemOrNothing[X, Idx]]
     ] = ???
+
+    def inDependencies: CollectedInfo.FlattenedConcat[IncomingInfo, ElemOrNothing[X, Idx]] = ???
+
+    def atIdx: ElemOrNothing[X, Idx] = ???
   }
 
   final def fillOutlet[Idx <: Int](using ValueOf[Idx]): OutletFiller[Idx] = new OutletFiller[Idx]()
@@ -256,11 +261,13 @@ object Node {
   object navigation {
     def pathPrefix[T](
         segment: PathSegment[T, DummyError]
-    ): Node[Any, Tuple2[CollectedInfo.Empty, T *: List[Segment] *: EmptyTuple], Nothing, Singleton[RawRequest]] =
+    ): Node[Any, Tuple2[CollectedInfo.Empty, CollectedInfo[T *: List[Segment] *: EmptyTuple]], Nothing, Singleton[
+      RawRequest
+    ]] =
       eitherNode((req: RawRequest) =>
         segment
           .matchSegments(req.segments)
-          .map(output => output.output *: output.unusedSegments *: EmptyTuple)
+          .map(output => CollectedInfo.empty.add(output.unusedSegments).add(output.output))
           .left
           .map(_ => CollectedInfo.empty)
       )
@@ -275,9 +282,51 @@ object Node {
 
   def crudNode: Node[Any, HttpMethod.CRUD, Response, Singleton[RawRequest]] = CrudNode
 
-  def sendFile(chunkSize: Int = 8 * 1024): FileDownloadNode = new FileDownloadNode(chunkSize)
+  def sendFile(chunkSize: Int = FileDownloadNode.defaultChunkSize): FileDownloadNode = new FileDownloadNode(chunkSize)
 
-  def sendFixedFile(path: Path, chunkSize: Int = 8 * 1024): Node[Any, EmptyTuple, Response, EmptyTuple] =
+  def sendFixedFile(
+      path: Path,
+      chunkSize: Int = FileDownloadNode.defaultChunkSize
+  ): Node[Any, EmptyTuple, Response, EmptyTuple] =
     fromValue(path).fillOutlet[0](sendFile(chunkSize))
+
+  /** Serves files in the specified static folder. The path of the file will be the remaining segments after the prefix
+    * has been matched.
+    *
+    * @example
+    *   If
+    * {{{
+    *   val staticFolder = Path("./some-folder")
+    *   val prefix = root / "static-prefix-route"
+    *   val node = serveStatic(staticFolder, prefix)
+    * }}}
+    * This will serve, for example
+    *   - "static-prefix-route/index.html" => some-folder/index.html
+    *   - "static-prefix-route/public/index.css" => some-folder/public/index.css
+    *   - "other-prefix/index.html" => will not match and continue to open outlet.
+    *
+    * @param staticFolder
+    *   Path of the folder (relative to where the server runs) to the folder where static are found
+    * @param prefix
+    *   matching prefix segment
+    * @param chunkSize
+    *   control the chunk size to read the file
+    * @return
+    */
+  def serveStatic(
+      staticFolder: Path,
+      prefix: PathSegment[Unit, DummyError],
+      chunkSize: Int = FileDownloadNode.defaultChunkSize
+  ): Node[Any, Singleton[CollectedInfo.Empty], Response, Singleton[RawRequest]] =
+    FileDownloadNode.serveStatic(staticFolder, prefix, chunkSize)
+
+  /** Same as serveStatic, but closes the open outlet with NotFound
+    */
+  def serveStaticOrNotFound(
+      staticFolder: Path,
+      prefix: PathSegment[Unit, DummyError],
+      chunkSize: Int = FileDownloadNode.defaultChunkSize
+  ): Node[Any, EmptyTuple, Response, Singleton[RawRequest]] =
+    serveStatic(staticFolder, prefix, chunkSize).fillOutlet[0](notFound)
 
 }

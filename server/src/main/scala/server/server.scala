@@ -1,7 +1,6 @@
 package server
 
 import ejoti.domain.{Header, Middleware, Request, Response, Server, Status}
-import facades.http.Http.http
 import facades.console.console
 import ejoti.domain.Node
 import ejoti.domain.Node.*
@@ -32,7 +31,8 @@ import fs2.io.file.Flags
 
   val helloPathFilled = helloPath.fillOutlet[1](step5)
 
-  val serverTree = helloPathFilled.fillOutlet[0](Node.sendFixedFile(Path("./test.txt"), 64 * 1024))
+  val serverTree =
+    helloPathFilled.fillOutlet[0](Node.serveStaticOrNotFound(Path("./demo-static-folder"), root / "static"))
 
   val webSocketServer = Node.leaf((req: Request.RawRequest) => ZIO.succeed(WebSocketResponse.echoWithLog))
 

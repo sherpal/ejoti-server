@@ -8,8 +8,16 @@ import ejoti.domain.*
 import ejoti.domain.Node.*
 import zio.{Task, ZIO}
 import fs2.io.file.Flags
+import urldsl.language.dummyErrorImpl.*
+import urldsl.language.*
+import urldsl.vocabulary.Segment
+import urldsl.errors.DummyError
+import ejoti.domain.Node.given
+import ejoti.domain.CollectedInfo.given
+import ejoti.domain.Node.*
 
-final class FileDownloadNode(chunkSize: Int = 8 * 1024) extends Node[Any, EmptyTuple, Response, Singleton[Path]] {
+final class FileDownloadNode(chunkSize: Int = FileDownloadNode.defaultChunkSize)
+    extends Node[Any, EmptyTuple, Response, Singleton[Path]] {
 
   type IO[+A] = Task[A]
 
@@ -37,6 +45,17 @@ final class FileDownloadNode(chunkSize: Int = 8 * 1024) extends Node[Any, EmptyT
 
 object FileDownloadNode {
 
+  def serveStatic(staticFolder: Path, prefix: PathSegment[Unit, DummyError], chunkSize: Int = defaultChunkSize) = {
+    val fileDownloadLeaf =
+      Node
+        .mappingNode((segments: List[Segment]) => staticFolder / Path(segments.map(_.content).mkString("/")))
+        .fillOutlet[0](Node.sendFile(chunkSize))
+
+    val navigationNode = Node.navigation.pathPrefix(prefix)
+
+    navigationNode.fillOutlet[1](fileDownloadLeaf)
+  }
+
   // todo, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Common_types
   def contentTypeFromExt(path: Path): Header.ContentType = Header.ContentType(path.extName match {
     case ".css"  => "text/css"
@@ -49,5 +68,7 @@ object FileDownloadNode {
     case ".txt"  => "text/plain"
     case _       => "application/octet-stream"
   })
+
+  val defaultChunkSize = 8 * 1024
 
 }
