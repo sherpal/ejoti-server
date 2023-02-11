@@ -48,10 +48,12 @@ object FileDownloadNode {
   def serveStatic(staticFolder: Path, prefix: PathSegment[Unit, DummyError], chunkSize: Int = defaultChunkSize) = {
     val fileDownloadLeaf =
       Node
-        .mappingNode((segments: List[Segment]) => staticFolder / Path(segments.map(_.content).mkString("/")))
+        .mappingNode((segments: Node.navigation.UnusedSegments) =>
+          staticFolder / Path(segments.segments.map(_.content).mkString("/"))
+        )
         .fillOutlet[0](Node.sendFile(chunkSize))
 
-    val navigationNode = Node.navigation.pathPrefix(prefix)
+    val navigationNode = Node.navigation.initialSegments.fillOutlet[0](Node.navigation.pathPrefix(prefix))
 
     navigationNode.fillOutlet[1](fileDownloadLeaf)
   }

@@ -3,7 +3,7 @@ package ejoti.domain
 import zio.ZIO
 
 /** Represents a Http header */
-sealed trait Header(name: String, value: String) {
+sealed trait Header(val name: String, val value: String) {
   def keyValue: (String, String) = name -> value
 }
 
@@ -13,11 +13,11 @@ object Header {
   case class Host(host: String) extends Header("Host", host)
   case class Connection(tpe: String) extends Header("Connection", tpe)
   case class ContentLength(length: Long) extends Header("Content-Length", length.toString)
-  case class Origin(value: String) extends Header("Origin", value)
-  case class Upgrade(value: String) extends Header("Upgrade", value)
-  case class UserAgent(name: String) extends Header("User-Agent", name)
+  case class Origin(override val value: String) extends Header("Origin", value)
+  case class Upgrade(override val value: String) extends Header("Upgrade", value)
+  case class UserAgent(override val name: String) extends Header("User-Agent", name)
 
-  case class RawHeader(name: String, value: String) extends Header(name, value)
+  case class RawHeader(override val name: String, override val value: String) extends Header(name, value)
 
   private val nameToDomain: Map[String, String => Header] = Map(
     "connection"     -> Connection.apply,

@@ -4,7 +4,14 @@ import zio.Chunk
 import zio.stream.ZStream
 import zio.{Queue, ZIO}
 
-final case class Response(status: Status[Int], headers: List[Header], body: ZStream[Any, Nothing, Chunk[Byte]])
+final case class Response(status: Status[Int], headers: List[Header], body: ZStream[Any, Nothing, Chunk[Byte]]) {
+  def withStatus(otherStatus: Status[Int]): Response = copy(status = otherStatus)
+
+  def addOrReplaceHeader(header: Header): Response = {
+    val newHeaders = header +: headers.filterNot(_.name == header.name)
+    copy(headers = newHeaders)
+  }
+}
 
 object Response {
 

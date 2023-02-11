@@ -20,8 +20,10 @@ import fs2.io.file.Flags
 
   import ejoti.domain.Node.given
 
-  val helloPath = navigation
-    .pathPrefix(root / "hello")
+  val helloPath = navigation.initialSegments.fillFirstOutlet(
+    navigation
+      .pathPrefix(root / "hello")
+  )
 
   val step1 = Node.decodeBodyAsString
   val step2 = step1.fillOutlet[0](mappingNode((req: Request[String]) => s"You sent me: ${req.body}"))

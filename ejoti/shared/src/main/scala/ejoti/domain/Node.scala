@@ -11,7 +11,7 @@ import ejoti.domain.Request.RawRequest
 import io.circe.Decoder
 import io.circe.parser.decode
 import zio.ZIO
-import urldsl.language.PathSegment
+import urldsl.language.{PathSegment, QueryParameters}
 import urldsl.vocabulary.PathMatchOutput
 import urldsl.errors.DummyError
 import urldsl.url.UrlStringParserGenerator
@@ -42,6 +42,11 @@ trait Node[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple] {
       ev: (Choices[X] | Exit) <:< WebSocketResponse,
       inIsRawRequest: Conversion[CollectedInfo[Singleton[RawRequest]], CollectedInfo[IncomingInfo]]
   ): WebSocketServer[R] = request => out(CollectedInfo.empty + request).map(ev)
+
+  def mapResponse(f: Response => Response)(using ev: Exit =:= Response)(using
+      Typeable[Exit]
+  ): Node[R, X, Response, IncomingInfo] =
+    new ResponseMappedNode(this, f compose ev)
 
   def out(collectedInfo: CollectedInfo[IncomingInfo]): ZIO[R, Nothing, Choices[X] | Exit]
 
@@ -191,17 +196,9 @@ object Node {
       effect: CollectedInfo[In] => ZIO[R, Nothing, Unit]
   ): Node[R, Singleton[Unit], Nothing, In] = new SideEffectNode(effect)
 
-  def eitherNode[Left, Right, In](
-      f: In => Either[Left, Right]
-  )(using
-      ValueOf[CollectedInfo.IndexOf[RawRequest, In *: RawRequest *: EmptyTuple]]
-  ): Node[Any, Left *: Right *: EmptyTuple, Nothing, In *: RawRequest *: EmptyTuple] = EitherNode((in: In, _) => f(in))
-
-  def eitherNodeWithRequest[Left, Right, In](
-      f: (In, RawRequest) => Either[Left, Right]
-  )(using
-      ValueOf[CollectedInfo.IndexOf[RawRequest, In *: RawRequest *: EmptyTuple]]
-  ): Node[Any, Left *: Right *: EmptyTuple, Nothing, In *: RawRequest *: EmptyTuple] = EitherNode(f)
+  def eitherNode[Left, Right, In <: Tuple](
+      f: CollectedInfo[In] => Either[Left, Right]
+  ): Node[Any, Left *: Right *: EmptyTuple, Nothing, In] = EitherNode(f)
 
   def failingEitherNode[T, In, Exit <: ExitType](
       f: In => ZIO[Any, Nothing, Either[Exit, T]]
@@ -259,24 +256,49 @@ object Node {
   val okString = leaf((message: String) => ZIO.succeed(Response.fromBodyString(Status.Ok, Nil, message)))
 
   object navigation {
+    sealed trait UnusedSegments {
+      def segments: List[Segment]
+    }
+    private case class UnusedSegmentsImpl(segments: List[Segment]) extends UnusedSegments
+    private def unusedSegments(segments: List[Segment]): UnusedSegments = UnusedSegmentsImpl(segments)
+
+    def initialSegments: Node[Any, Singleton[UnusedSegments], Nothing, Singleton[Request.RawRequest]] =
+      mappingNode((request: Request.RawRequest) => unusedSegments(request.segments))
+
     def pathPrefix[T](
         segment: PathSegment[T, DummyError]
-    ): Node[Any, Tuple2[CollectedInfo.Empty, CollectedInfo[T *: List[Segment] *: EmptyTuple]], Nothing, Singleton[
-      RawRequest
-    ]] =
-      eitherNode((req: RawRequest) =>
+    ) =
+      eitherNode((segments: CollectedInfo[Singleton[UnusedSegments]]) =>
         segment
-          .matchSegments(req.segments)
-          .map(output => CollectedInfo.empty.add(output.unusedSegments).add(output.output))
+          .matchSegments(segments.access[UnusedSegments].segments)
+          .map(output => CollectedInfo.empty.add(unusedSegments(output.unusedSegments)).add(output.output))
           .left
-          .map(_ => CollectedInfo.empty)
+          .map(_ => segments)
       )
 
     def path[T](
         segment: PathSegment[T, DummyError]
     ): Node[Any, Tuple2[CollectedInfo.Empty, T], Nothing, Singleton[RawRequest]] =
-      eitherNode((req: RawRequest) =>
-        segment.matchSegments(req.segments).map(output => output.output).left.map(_ => CollectedInfo.empty)
+      eitherNode((req: CollectedInfo[Singleton[RawRequest]]) =>
+        segment
+          .matchSegments(req.access[RawRequest].segments)
+          .map(output => output.output)
+          .left
+          .map(_ => CollectedInfo.empty)
+      )
+
+    def pathUsingUnusedSegments[T](segment: PathSegment[T, DummyError]) = eitherNode {
+      (segmentsInfo: CollectedInfo[Singleton[UnusedSegments]]) =>
+        segment
+          .matchSegments(segmentsInfo.access[UnusedSegments].segments)
+          .map(output => output.output)
+          .left
+          .map(_ => CollectedInfo.empty)
+    }
+
+    def queryParamNode[Q](params: QueryParameters[Q, DummyError]) =
+      Node.eitherNode((req: CollectedInfo[Singleton[RawRequest]]) =>
+        params.matchParams(req.access[RawRequest].params).left.map(_ => CollectedInfo.empty).map(_.output)
       )
   }
 

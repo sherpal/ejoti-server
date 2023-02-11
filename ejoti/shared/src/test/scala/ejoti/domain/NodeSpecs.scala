@@ -17,8 +17,11 @@ object NodeSpecs extends ZIOSpecDefault {
   def spec =
     suite("NodeSpecs")(
       test("A simple server example") {
-        val helloPath = navigation
-          .pathPrefix(root / "hello")
+        val helloPath = navigation.initialSegments
+          .fillFirstOutlet(
+            navigation
+              .pathPrefix(root / "hello")
+          )
           .fillOutlet[0](notFound)
         val serverTree = Node.decodeBodyAsString
           .fillOutlet[0](mappingNode((req: Request[String]) => s"You sent me: ${req.body}"))
@@ -37,12 +40,60 @@ object NodeSpecs extends ZIOSpecDefault {
         } yield assertTrue(testResponse.assertCode[200], testResponse.body == "You sent me: body")
 
       },
+      test("Chaining the path prefixes") {
+        val firstPath  = root / "first"
+        val secondPath = root / "second"
+
+        def ending(value: String): Header = Header.RawHeader("ending", value)
+
+        val tree = navigation.initialSegments.fillFirstOutlet(
+          navigation
+            .pathPrefix(firstPath)
+            .fillOutlet[1](
+              navigation
+                .pathPrefix(secondPath)
+                .fillFirstOutlet(Node.notFound.mapResponse(_.addOrReplaceHeader(ending("one"))))
+                .fillFirstOutlet(Node.ok.mapResponse(_.addOrReplaceHeader(ending("zero"))))
+            )
+            .fillOutlet[0](Node.notFound.mapResponse(_.addOrReplaceHeader(ending("two"))))
+        )
+
+        val server = tree.asServer
+        for {
+          firstResponse      <- server.handleRequest(TestRequest.get.withSegments(Segment("first")))
+          firstTestResponse  <- TestResponse.fromResponseZIO(firstResponse, _.asString)
+          secondResponse     <- server.handleRequest(TestRequest.get.withSegments(Segment("first"), Segment("second")))
+          secondTestResponse <- TestResponse.fromResponseZIO(secondResponse, _.asString)
+          thirdResponse      <- server.handleRequest(TestRequest.get.withSegments(Segment("other")))
+          thirdTestResponse  <- TestResponse.fromResponseZIO(thirdResponse, _.asString)
+          fourthResponse <- server.handleRequest(
+            TestRequest.get.withSegments(Segment("first"), Segment("second"), Segment("third"))
+          )
+          fourthTestResponse <- TestResponse.fromResponseZIO(fourthResponse, _.asString)
+        } yield assertTrue(
+          firstTestResponse.headerFromName("ending")  == Some(ending("one")),
+          secondTestResponse.headerFromName("ending") == Some(ending("zero")),
+          thirdTestResponse.headerFromName("ending")  == Some(ending("two")),
+          fourthTestResponse.headerFromName("ending") == Some(ending("zero"))
+        )
+      },
+      test("Mapping the response") {
+        val baseNode       = Node.ok
+        val responseMapped = baseNode.mapResponse(_.withStatus(Status.BadRequest))
+
+        for {
+          response     <- responseMapped.asServer.handleRequest(TestRequest.get)
+          testResponse <- TestResponse.fromResponseZIO(response, _.asString)
+        } yield assertTrue(testResponse.assertCode[400])
+      },
       test("Providing Int for AdditionalInfo") {
         val baseNode               = Node.fromValue("hello")
         val nodeWithAdditionalInfo = baseNode.provide[Int *: EmptyTuple]
 
         for {
-          nodeOut <- nodeWithAdditionalInfo.outIfIndex[0](CollectedInfo.empty + 3 + "other string").someOrFailException
+          nodeOut <- nodeWithAdditionalInfo
+            .outIfIndex[0](CollectedInfo.empty + 3 + "other string")
+            .someOrFailException
         } yield assertTrue(nodeOut.access[String] == "hello", nodeOut.access[Int] == 3)
       },
       test("Asking for Int proof") {
