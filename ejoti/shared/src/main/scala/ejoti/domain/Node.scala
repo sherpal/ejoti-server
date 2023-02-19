@@ -187,6 +187,8 @@ object Node {
   }
 
   def fromValue[Info](info: Info): Node[Any, Singleton[Info], Nothing, EmptyTuple] = new NodeFromValue(info)
+  def fromZIOValue[R, Info](info: ZIO[R, Nothing, Info]): Node[R, Singleton[Info], Nothing, EmptyTuple] =
+    new NodeFromZIOValue(info)
 
   type Example1 = String *: Double *: EmptyTuple
   summon[Choices[Example1] =:= (Value[String, 0] | Value[Double, 1])]

@@ -59,18 +59,20 @@ object FileDownloadNode {
   }
 
   // todo, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Common_types
-  def contentTypeFromExt(path: Path): Header.ContentType = Header.ContentType(path.extName match {
+  def contentTypeFromExt(path: Path): Header.ContentType = Header.ContentType(path.extName.toLowerCase() match {
     case ".css"  => "text/css"
     case ".csv"  => "text/csv"
     case ".html" => "text/html"
     case ".htm"  => "text/html"
+    case ".jpg"  => "image/jpeg"
     case ".js"   => "text/javascript"
     case ".json" => "application/json"
     case ".mjs"  => "text/javascript"
+    case ".svg"  => "image/svg+xml"
     case ".txt"  => "text/plain"
     case _       => "application/octet-stream"
   })
 
-  val defaultChunkSize = 8 * 1024
+  val defaultChunkSize = 64 * 1024
 
 }

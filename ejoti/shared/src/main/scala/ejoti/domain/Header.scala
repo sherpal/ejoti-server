@@ -10,6 +10,7 @@ sealed trait Header(val name: String, val value: String) {
 object Header {
 
   case class ContentType(tpe: String) extends Header("Content-Type", tpe)
+  case class ContentEncoding(encoding: String) extends Header("Content-Encoding", encoding)
   case class Host(host: String) extends Header("Host", host)
   case class Connection(tpe: String) extends Header("Connection", tpe)
   case class ContentLength(length: Long) extends Header("Content-Length", length.toString)
