@@ -21,11 +21,12 @@ object Status {
       type StatusCode = Code
       override def code: Code = codeValue.value
 
-  def Ok: Status[200]               = status[200]
-  def BadRequest: Status[400]       = status[400]
-  def NotFound: Status[404]         = status[404]
-  def MethodNotAllowed: Status[405] = status[405]
-  def Internal: Status[500]         = status[500]
+  def Ok: Status[200]                = status
+  def TemporaryRedirect: Status[307] = status
+  def BadRequest: Status[400]        = status
+  def NotFound: Status[404]          = status
+  def MethodNotAllowed: Status[405]  = status
+  def Internal: Status[500]          = status
 
   summon[IsSuccess[200] =:= true]
   summon[IsSuccess[300] =:= false]

@@ -14,6 +14,7 @@ object Header {
   case class Host(host: String) extends Header("Host", host)
   case class Connection(tpe: String) extends Header("Connection", tpe)
   case class ContentLength(length: Long) extends Header("Content-Length", length.toString)
+  case class Location(uri: String) extends Header("Location", uri)
   case class Origin(override val value: String) extends Header("Origin", value)
   case class Upgrade(override val value: String) extends Header("Upgrade", value)
   case class UserAgent(override val name: String) extends Header("User-Agent", name)
@@ -27,7 +28,8 @@ object Header {
     "content-length" -> ContentLength.apply.compose(_.toLong),
     "user-agent"     -> UserAgent.apply,
     "upgrade"        -> Upgrade.apply,
-    "origin"         -> Origin.apply
+    "origin"         -> Origin.apply,
+    "location"       -> Location.apply
   )
 
   def fromKeyValuePairZIO(name: String, value: String): ZIO[Any, Nothing, Header] =

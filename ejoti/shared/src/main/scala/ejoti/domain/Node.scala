@@ -21,6 +21,7 @@ import urldsl.vocabulary.Segment
 import java.net.http.HttpResponse.ResponseInfo
 import ejoti.domain.nodeast.*
 import fs2.io.file.Path
+import scala.deriving.Mirror
 
 trait Node[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple] {
   self =>
@@ -251,9 +252,10 @@ object Node {
   private def leafFromResponse(response: => Response): Node[Any, EmptyTuple, Response, Unit *: EmptyTuple] =
     leaf(_ => ZIO.succeed(response))
 
-  val ok               = leafFromResponse(Response.Ok)
-  val notFound         = leafFromResponse(Response.NotFound)
-  val methodNotAllowed = leafFromResponse(Response.MethodNotAllowed)
+  val ok                            = leafFromResponse(Response.Ok)
+  def temporaryRedirect(to: String) = leafFromResponse(Response.TemporaryRedirect(to))
+  val notFound                      = leafFromResponse(Response.NotFound)
+  val methodNotAllowed              = leafFromResponse(Response.MethodNotAllowed)
 
   val okString = leaf((message: String) => ZIO.succeed(Response.fromBodyString(Status.Ok, Nil, message)))
 
@@ -352,5 +354,8 @@ object Node {
       chunkSize: Int = FileDownloadNode.defaultChunkSize
   ): Node[Any, EmptyTuple, Response, Singleton[RawRequest]] =
     serveStatic(staticFolder, prefix, chunkSize).fillOutlet[0](notFound)
+
+  def sealedDispatch[T](using mirror: Mirror.SumOf[T]): Node[Any, mirror.MirroredElemTypes, Nothing, Singleton[T]] =
+    FromMirror[T]
 
 }

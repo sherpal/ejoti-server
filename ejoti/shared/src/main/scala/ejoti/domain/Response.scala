@@ -15,7 +15,9 @@ final case class Response(status: Status[Int], headers: List[Header], body: ZStr
 
 object Response {
 
-  def empty(status: Status[Int]): Response = Response(status, Nil, ZStream.empty)
+  def empty(status: Status[Int]): Response = empty(status, Nil)
+
+  def empty(status: Status[Int], headers: List[Header]): Response = Response(status, headers, ZStream.empty)
 
   def fromBodyString(status: Status[Int], headers: List[Header], body: String): Response = {
     val bytes = {
@@ -29,8 +31,9 @@ object Response {
     )
   }
 
-  def Ok               = empty(Status.Ok)
-  def NotFound         = empty(Status.NotFound)
-  def MethodNotAllowed = empty(Status.MethodNotAllowed)
+  def Ok                            = empty(Status.Ok)
+  def TemporaryRedirect(to: String) = empty(Status.TemporaryRedirect, List(Header.Location(to)))
+  def NotFound                      = empty(Status.NotFound)
+  def MethodNotAllowed              = empty(Status.MethodNotAllowed)
 
 }

@@ -14,6 +14,8 @@ ThisBuild / scalacOptions ++= List(
 )
 
 val circeVersion = "0.14.1"
+val zioVersion   = "2.0.9"
+
 ThisBuild / testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
 
 lazy val Ejoti = crossProject(JSPlatform, JVMPlatform)
@@ -22,8 +24,8 @@ lazy val Ejoti = crossProject(JSPlatform, JVMPlatform)
     name := "Ejoti",
     testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
     libraryDependencies ++= List(
-      "dev.zio" %%% "zio" % "2.0.5",
-      "dev.zio" %%% "zio-streams" % "2.0.5",
+      "dev.zio" %%% "zio" % zioVersion,
+      "dev.zio" %%% "zio-streams" % zioVersion,
       "dev.zio" %%% "zio-interop-cats" % "23.0.0.1",
       "be.doeraene" %%% "url-dsl" % "0.5.0",
       "io.github.cquiroz" %%% "scala-java-time" % "2.4.0"
