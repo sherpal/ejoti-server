@@ -20,21 +20,23 @@ import fs2.io.file.Flags
 
   import ejoti.domain.Node.given
 
-  val helloPath = navigation.initialSegments.fillFirstOutlet(
-    navigation
-      .pathPrefix(root / "hello")
-  )
+  val helloPath = navigation.initialSegments
+    .outlet[0]
+    .attach(
+      navigation
+        .pathPrefix(root / "hello")
+    )
 
   val step1 = Node.decodeBodyAsString
-  val step2 = step1.fillOutlet[0](mappingNode((req: Request[String]) => s"You sent me: ${req.body}"))
-  val step3 = step2.fillOutlet[0](printInfo[Request[String]])
-  val step4 = step3.fillOutlet[0](printRequest)
-  val step5 = step4.fillOutlet[0](Node.okString)
+  val step2 = step1.outlet[0].attach(mappingNode((req: Request[String]) => s"You sent me: ${req.body}"))
+  val step3 = step2.outlet[0].attach(printInfo[Request[String]])
+  val step4 = step3.outlet[0].attach(printRequest)
+  val step5 = step4.outlet[0].attach(Node.okString)
 
-  val helloPathFilled = helloPath.fillOutlet[1](step5)
+  val helloPathFilled = helloPath.outlet[1].attach(step5)
 
   val serverTree =
-    helloPathFilled.fillOutlet[0](Node.serveStaticOrNotFound(Path("./demo-static-folder"), root / "static"))
+    helloPathFilled.outlet[0].attach(Node.serveStaticOrNotFound(Path("./demo-static-folder"), root / "static"))
 
   val webSocketServer = Node.leaf((req: Request.RawRequest) => ZIO.succeed(WebSocketResponse.echoWithLog))
 

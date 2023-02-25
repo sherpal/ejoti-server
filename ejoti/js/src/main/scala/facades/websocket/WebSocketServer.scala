@@ -58,7 +58,9 @@ object WebSocketServer {
                   connection = request.accept((), request.origin)
                   streamFiber <- outgoingStream.foreach(connection.sendMessageZIO).fork
                   _ = connection.onEjotiMessage(message => runtime.unsafe.run(incomingQueue.offer(message)))
-                  _ = connection.onClose((_, _) => runtime.unsafe.runToFuture(incomingQueue.shutdown))
+                  _ = connection.onClose((_, _) =>
+                    runtime.unsafe.runToFuture(incomingQueue.isEmpty.repeatUntil(identity) *> incomingQueue.shutdown)
+                  )
                   _ <- streamFiber.join
                 } yield ()
             }

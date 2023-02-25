@@ -19,7 +19,7 @@ object FromMirrorSpecs extends ZIOSpecDefault {
   val cLeaf =
     Node.leaf((c: C) => ZIO.succeed(Response.empty(Status.TemporaryRedirect).addOrReplaceHeader(Header.Location(c.x))))
 
-  val xNodeToLeaf = FromMirror[X].fillFirstOutlet(aLeaf).fillFirstOutlet(bLeaf).fillFirstOutlet(cLeaf)
+  val xNodeToLeaf = FromMirror[X].outlet[0].attach(aLeaf).outlet[0].attach(bLeaf).outlet[0].attach(cLeaf)
 
   def spec =
     suite("FromMirrorSpecs")(
@@ -27,19 +27,22 @@ object FromMirrorSpecs extends ZIOSpecDefault {
         request <- ZIO.succeed(TestRequest.fromBodyString(""))
         aResponse <- Node
           .fromValue[X](A)
-          .fillFirstOutlet(xNodeToLeaf)
+          .outlet[0]
+          .attach(xNodeToLeaf)
           .asServer
           .handleRequest(request)
           .flatMap(TestResponse.fromResponseZIO(_, _.asString))
         bResponse <- Node
           .fromValue[X](B())
-          .fillFirstOutlet(xNodeToLeaf)
+          .outlet[0]
+          .attach(xNodeToLeaf)
           .asServer
           .handleRequest(request)
           .flatMap(TestResponse.fromResponseZIO(_, _.asString))
         cResponse <- Node
           .fromValue[X](C("hello"))
-          .fillFirstOutlet(xNodeToLeaf)
+          .outlet[0]
+          .attach(xNodeToLeaf)
           .asServer
           .handleRequest(request)
           .flatMap(TestResponse.fromResponseZIO(_, _.asString))

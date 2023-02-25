@@ -10,6 +10,20 @@ sealed trait Header(val name: String, val value: String) {
 object Header {
 
   case class ContentType(tpe: String) extends Header("Content-Type", tpe)
+
+  object ContentType {
+    lazy val `application/octet-stream` = ContentType("application/octet-stream")
+    lazy val `text/css`                 = Header.ContentType("text/css")
+    lazy val `text/csv`                 = Header.ContentType("text/csv")
+    lazy val `text/html`                = Header.ContentType("text/html")
+    lazy val `image/jpeg`               = Header.ContentType("image/jpeg")
+    lazy val `text/javascript`          = Header.ContentType("text/javascript")
+    lazy val `application/json`         = Header.ContentType("application/json")
+    lazy val `application/pdf`          = Header.ContentType("application/pdf")
+    lazy val `image/svg+xml`            = Header.ContentType("image/svg+xml")
+    lazy val `text/plain`               = Header.ContentType("text/plain")
+  }
+
   case class ContentEncoding(encoding: String) extends Header("Content-Encoding", encoding)
   case class Host(host: String) extends Header("Host", host)
   case class Connection(tpe: String) extends Header("Connection", tpe)
@@ -33,7 +47,7 @@ object Header {
   )
 
   def fromKeyValuePairZIO(name: String, value: String): ZIO[Any, Nothing, Header] =
-    ZIO.succeed(
+    ZIO.succeed {
       nameToDomain.getOrElse(
         {
           import scala.language.unsafeNulls
@@ -41,6 +55,6 @@ object Header {
         },
         RawHeader(name, _)
       )(value)
-    )
+    }
 
 }

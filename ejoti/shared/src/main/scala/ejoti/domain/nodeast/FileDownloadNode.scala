@@ -51,27 +51,29 @@ object FileDownloadNode {
         .mappingNode((segments: Node.navigation.UnusedSegments) =>
           staticFolder / Path(segments.segments.map(_.content).mkString("/"))
         )
-        .fillOutlet[0](Node.sendFile(chunkSize))
+        .outlet[0]
+        .attach(Node.sendFile(chunkSize))
 
-    val navigationNode = Node.navigation.initialSegments.fillOutlet[0](Node.navigation.pathPrefix(prefix))
+    val navigationNode = Node.navigation.initialSegments.outlet[0].attach(Node.navigation.pathPrefix(prefix))
 
-    navigationNode.fillOutlet[1](fileDownloadLeaf)
+    navigationNode.outlet[1].attach(fileDownloadLeaf)
   }
 
   // todo, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Common_types
-  def contentTypeFromExt(path: Path): Header.ContentType = Header.ContentType(path.extName.toLowerCase() match {
-    case ".css"  => "text/css"
-    case ".csv"  => "text/csv"
-    case ".html" => "text/html"
-    case ".htm"  => "text/html"
-    case ".jpg"  => "image/jpeg"
-    case ".js"   => "text/javascript"
-    case ".json" => "application/json"
-    case ".mjs"  => "text/javascript"
-    case ".svg"  => "image/svg+xml"
-    case ".txt"  => "text/plain"
-    case _       => "application/octet-stream"
-  })
+  def contentTypeFromExt(path: Path): Header.ContentType = path.extName.toLowerCase() match {
+    case ".css"  => Header.ContentType.`text/css`
+    case ".csv"  => Header.ContentType.`text/csv`
+    case ".html" => Header.ContentType.`text/html`
+    case ".htm"  => Header.ContentType.`text/html`
+    case ".jpg"  => Header.ContentType.`image/jpeg`
+    case ".js"   => Header.ContentType.`text/javascript`
+    case ".json" => Header.ContentType.`application/json`
+    case ".mjs"  => Header.ContentType.`text/javascript`
+    case ".pdf"  => Header.ContentType.`application/pdf`
+    case ".svg"  => Header.ContentType.`image/svg+xml`
+    case ".txt"  => Header.ContentType.`text/plain`
+    case _       => Header.ContentType.`application/octet-stream`
+  }
 
   val defaultChunkSize = 64 * 1024
 

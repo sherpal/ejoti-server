@@ -18,17 +18,24 @@ object NodeSpecs extends ZIOSpecDefault {
     suite("NodeSpecs")(
       test("A simple server example") {
         val helloPath = navigation.initialSegments
-          .fillFirstOutlet(
+          .outlet[0]
+          .attach(
             navigation
               .pathPrefix(root / "hello")
           )
-          .fillOutlet[0](notFound)
+          .outlet[0]
+          .attach(notFound)
         val serverTree = Node.decodeBodyAsString
-          .fillOutlet[0](mappingNode((req: Request[String]) => s"You sent me: ${req.body}"))
-          .fillOutlet[0](printInfo[Request[String]])
-          .fillOutlet[0](printRequest)
-          .fillOutlet[0](helloPath)
-          .fillOutlet[0](Node.okString)
+          .outlet[0]
+          .attach(mappingNode((req: Request[String]) => s"You sent me: ${req.body}"))
+          .outlet[0]
+          .attach(printInfo[Request[String]])
+          .outlet[0]
+          .attach(printRequest)
+          .outlet[0]
+          .attach(helloPath)
+          .outlet[0]
+          .attach(Node.okString)
 
         val program = serverTree.asServer.handleRequest(
           TestRequest.fromBodyString("body").withSegments(Segment("hello"))
@@ -46,17 +53,23 @@ object NodeSpecs extends ZIOSpecDefault {
 
         def ending(value: String): Header = Header.RawHeader("ending", value)
 
-        val tree = navigation.initialSegments.fillFirstOutlet(
-          navigation
-            .pathPrefix(firstPath)
-            .fillOutlet[1](
-              navigation
-                .pathPrefix(secondPath)
-                .fillFirstOutlet(Node.notFound.mapResponse(_.addOrReplaceHeader(ending("one"))))
-                .fillFirstOutlet(Node.ok.mapResponse(_.addOrReplaceHeader(ending("zero"))))
-            )
-            .fillOutlet[0](Node.notFound.mapResponse(_.addOrReplaceHeader(ending("two"))))
-        )
+        val tree = navigation.initialSegments
+          .outlet[0]
+          .attach(
+            navigation
+              .pathPrefix(firstPath)
+              .outlet[1]
+              .attach(
+                navigation
+                  .pathPrefix(secondPath)
+                  .outlet[0]
+                  .attach(Node.notFound.mapResponse(_.addOrReplaceHeader(ending("one"))))
+                  .outlet[0]
+                  .attach(Node.ok.mapResponse(_.addOrReplaceHeader(ending("zero"))))
+              )
+              .outlet[0]
+              .attach(Node.notFound.mapResponse(_.addOrReplaceHeader(ending("two"))))
+          )
 
         val server = tree.asServer
         for {
@@ -133,13 +146,17 @@ object NodeSpecs extends ZIOSpecDefault {
       },
       test("Filling a Crud node") {
         def itWasMethod[Method <: HttpMethod](using methodValue: ValueOf[Method]) =
-          Node.fromValue(s"It was ${methodValue.value}!").withProofOf[Method].fillOutlet[0](Node.okString)
+          Node.fromValue(s"It was ${methodValue.value}!").withProofOf[Method].outlet[0].attach(Node.okString)
 
         val tree = Node.crudNode
-          .fillFirstOutlet(itWasMethod[HttpMethod.POST])
-          .fillFirstOutlet(itWasMethod[HttpMethod.GET])
-          .fillFirstOutlet(itWasMethod[HttpMethod.PATCH])
-          .fillFirstOutlet(itWasMethod[HttpMethod.DELETE])
+          .outlet[0]
+          .attach(itWasMethod[HttpMethod.POST])
+          .outlet[0]
+          .attach(itWasMethod[HttpMethod.GET])
+          .outlet[0]
+          .attach(itWasMethod[HttpMethod.PATCH])
+          .outlet[0]
+          .attach(itWasMethod[HttpMethod.DELETE])
 
         val server = tree.asServer
 
@@ -177,7 +194,8 @@ object NodeSpecs extends ZIOSpecDefault {
 
         val crudProvided = Node.crudNode
           .provide[Node.Singleton[String]]
-          .fillFirstOutlet(baseNode)
+          .outlet[0]
+          .attach(baseNode)
 
         for {
           probablyResponse <- crudProvided
@@ -209,21 +227,27 @@ object NodeSpecs extends ZIOSpecDefault {
 
         val createNode = Node.decodeBodyAsString
           .provide[Long *: EmptyTuple]
-          .fillOutlet[0](createOrPatchNodeSideEffect)
-          .fillOutlet[0](Node.ok)
+          .outlet[0]
+          .attach(createOrPatchNodeSideEffect)
+          .outlet[0]
+          .attach(Node.ok)
           .withProofOf[HttpMethod.POST]
 
         val getNode = Node
           .failingEitherNode((id: Long) => ZIO.succeed(data.get(id).toRight(Response.NotFound)))
-          .fillOutlet[0](Node.okString)
+          .outlet[0]
+          .attach(Node.okString)
           .withProofOf[HttpMethod.GET]
 
         val patchNode = Node
           .failingEitherNode((id: Long) => ZIO.succeed(data.get(id).toRight(Response.NotFound)))
           .provide[Request.RawRequest *: EmptyTuple]
-          .fillFirstOutlet(Node.decodeBodyAsString)
-          .fillFirstOutlet(createOrPatchNodeSideEffect)
-          .fillFirstOutlet(Node.ok)
+          .outlet[0]
+          .attach(Node.decodeBodyAsString)
+          .outlet[0]
+          .attach(createOrPatchNodeSideEffect)
+          .outlet[0]
+          .attach(Node.ok)
           .withProofOf[HttpMethod.PATCH]
 
         val deleteNodeSideEffect = Node.sideEffectNode((in: CollectedInfo[Long *: EmptyTuple]) =>
@@ -233,17 +257,23 @@ object NodeSpecs extends ZIOSpecDefault {
           }
         )
 
-        val deleteNode = deleteNodeSideEffect.fillFirstOutlet(Node.ok).withProofOf[HttpMethod.DELETE]
+        val deleteNode = deleteNodeSideEffect.outlet[0].attach(Node.ok).withProofOf[HttpMethod.DELETE]
 
         val crudWithPath =
           Node.navigation
             .path(path)
-            .fillFirstOutlet(Node.notFound)
-            .fillFirstOutlet(Node.crudNode)
-            .fillFirstOutlet(createNode)
-            .fillFirstOutlet(getNode)
-            .fillFirstOutlet(patchNode)
-            .fillFirstOutlet(deleteNode)
+            .outlet[0]
+            .attach(Node.notFound)
+            .outlet[0]
+            .attach(Node.crudNode)
+            .outlet[0]
+            .attach(createNode)
+            .outlet[0]
+            .attach(getNode)
+            .outlet[0]
+            .attach(patchNode)
+            .outlet[0]
+            .attach(deleteNode)
 
         val server = crudWithPath.asServer
 

@@ -68,7 +68,7 @@ trait Node[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple] {
 
   class OutletFiller[Idx <: Int](using v: ValueOf[Idx]) {
     private val idx = summon[ValueOf[Idx]].value
-    def apply[R0 <: R, Y <: Tuple, Exit1 <: ExitType](
+    def attach[R0 <: R, Y <: Tuple, Exit1 <: ExitType](
         that: Node[R0, Y, Exit1, CollectedInfo.FlattenedConcat[IncomingInfo, ElemOrNothing[X, Idx]]]
     )(using
         Typeable[Exit],
@@ -77,6 +77,15 @@ trait Node[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple] {
     ): Node[R0, Tuple.Take[X, Idx] ::: CollectedInfo.MappedCollectedInfo[Y, CollectedInfo.LiftedToCollectedInfo[
       ElemOrNothing[X, Idx]
     ]] ::: Tuple.Drop[X, Idx + 1], Exit | Exit1, IncomingInfo] = new OutletFilledNode(self, that)
+
+    /** Sames as attach, but forces the attached [[Node]] to close the outlet by not producing any. */
+    def close[R0 <: R, Exit1 <: ExitType](
+        that: Node[R0, EmptyTuple, Exit1, CollectedInfo.FlattenedConcat[IncomingInfo, ElemOrNothing[X, Idx]]]
+    )(using
+        Typeable[Exit],
+        Typeable[Exit1]
+    ): Node[R0, Tuple.Take[X, Idx] ::: Tuple.Drop[X, Idx + 1], Exit | Exit1, IncomingInfo] =
+      new OutletFilledNode(self, that)
 
     /** !DO NOT USE!
       *
@@ -107,9 +116,7 @@ trait Node[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple] {
     def atIdx: ElemOrNothing[X, Idx] = ???
   }
 
-  final def fillOutlet[Idx <: Int](using ValueOf[Idx]): OutletFiller[Idx] = new OutletFiller[Idx]()
-
-  final def fillFirstOutlet: OutletFiller[0] = fillOutlet[0]
+  final def outlet[Idx <: Int](using ValueOf[Idx]): OutletFiller[Idx] = new OutletFiller[Idx]()
 
   final def withProofOf[Proof](using
       ValueOf[CollectedInfo.IndexesOf[IncomingInfo, Proof *: IncomingInfo]],
@@ -209,6 +216,9 @@ object Node {
 
   def leaf[R, In, Exit <: ExitType](f: In => ZIO[R, Nothing, Exit]): Node[R, EmptyTuple, Exit, Singleton[In]] =
     (in: CollectedInfo[Singleton[In]]) => f(in.access[In])
+
+  def leafFromZIOValue[R, Exit <: ExitType](effect: ZIO[R, Nothing, Exit]): Node[R, EmptyTuple, Exit, EmptyTuple] =
+    (in: CollectedInfo.Empty) => effect
 
   def mappingNode[T, U](f: T => U): Node[Any, U *: EmptyTuple, Nothing, T *: EmptyTuple] =
     MappingNode(f)
@@ -314,7 +324,7 @@ object Node {
       path: Path,
       chunkSize: Int = FileDownloadNode.defaultChunkSize
   ): Node[Any, EmptyTuple, Response, EmptyTuple] =
-    fromValue(path).fillOutlet[0](sendFile(chunkSize))
+    fromValue(path).outlet[0].attach(sendFile(chunkSize))
 
   /** Serves files in the specified static folder. The path of the file will be the remaining segments after the prefix
     * has been matched.
@@ -353,7 +363,7 @@ object Node {
       prefix: PathSegment[Unit, DummyError],
       chunkSize: Int = FileDownloadNode.defaultChunkSize
   ): Node[Any, EmptyTuple, Response, Singleton[RawRequest]] =
-    serveStatic(staticFolder, prefix, chunkSize).fillOutlet[0](notFound)
+    serveStatic(staticFolder, prefix, chunkSize).outlet[0].attach(notFound)
 
   def sealedDispatch[T](using mirror: Mirror.SumOf[T]): Node[Any, mirror.MirroredElemTypes, Nothing, Singleton[T]] =
     FromMirror[T]

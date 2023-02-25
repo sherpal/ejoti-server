@@ -21,6 +21,10 @@ object Status {
       type StatusCode = Code
       override def code: Code = codeValue.value
 
+  def fromCode(value: Int): Status[Int] = new Status[Int] {
+    def code: Int = value
+  }
+
   def Ok: Status[200]                = status
   def TemporaryRedirect: Status[307] = status
   def BadRequest: Status[400]        = status
