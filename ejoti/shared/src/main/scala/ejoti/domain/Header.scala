@@ -5,6 +5,8 @@ import zio.ZIO
 /** Represents a Http header */
 sealed trait Header(val name: String, val value: String) {
   def keyValue: (String, String) = name -> value
+
+  def prettyPrint: String = s"$name: $value"
 }
 
 object Header {
@@ -12,16 +14,17 @@ object Header {
   case class ContentType(tpe: String) extends Header("Content-Type", tpe)
 
   object ContentType {
-    lazy val `application/octet-stream` = ContentType("application/octet-stream")
-    lazy val `text/css`                 = Header.ContentType("text/css")
-    lazy val `text/csv`                 = Header.ContentType("text/csv")
-    lazy val `text/html`                = Header.ContentType("text/html")
-    lazy val `image/jpeg`               = Header.ContentType("image/jpeg")
-    lazy val `text/javascript`          = Header.ContentType("text/javascript")
-    lazy val `application/json`         = Header.ContentType("application/json")
-    lazy val `application/pdf`          = Header.ContentType("application/pdf")
-    lazy val `image/svg+xml`            = Header.ContentType("image/svg+xml")
-    lazy val `text/plain`               = Header.ContentType("text/plain")
+    lazy val `application/octet-stream`          = ContentType("application/octet-stream")
+    lazy val `text/css`                          = Header.ContentType("text/css")
+    lazy val `text/csv`                          = Header.ContentType("text/csv")
+    lazy val `text/html`                         = Header.ContentType("text/html")
+    lazy val `image/jpeg`                        = Header.ContentType("image/jpeg")
+    lazy val `text/javascript`                   = Header.ContentType("text/javascript")
+    lazy val `application/json`                  = Header.ContentType("application/json")
+    lazy val `application/pdf`                   = Header.ContentType("application/pdf")
+    lazy val `image/svg+xml`                     = Header.ContentType("image/svg+xml")
+    lazy val `text/plain`                        = Header.ContentType("text/plain")
+    lazy val `application/x-www-form-urlencoded` = Header.ContentType("application/x-www-form-urlencoded")
   }
 
   case class ContentEncoding(encoding: String) extends Header("Content-Encoding", encoding)
@@ -32,6 +35,18 @@ object Header {
   case class Origin(override val value: String) extends Header("Origin", value)
   case class Upgrade(override val value: String) extends Header("Upgrade", value)
   case class UserAgent(override val name: String) extends Header("User-Agent", name)
+  case class Cookie(cookiesString: String) extends Header("Cookie", cookiesString) {
+    import scala.language.unsafeNulls
+    lazy val cookies: Map[String, String] = cookiesString
+      .split(";")
+      .map(_.trim)
+      .map(_.split("=").toList)
+      .collect { case cookieName :: cookieValue :: Nil =>
+        cookieName -> cookieValue
+      }
+      .toMap
+  }
+  case class SetCookie(cookie: HttpCookie) extends Header("Set-Cookie", cookie.setCookieValue)
 
   case class RawHeader(override val name: String, override val value: String) extends Header(name, value)
 
@@ -43,7 +58,8 @@ object Header {
     "user-agent"     -> UserAgent.apply,
     "upgrade"        -> Upgrade.apply,
     "origin"         -> Origin.apply,
-    "location"       -> Location.apply
+    "location"       -> Location.apply,
+    "cookie"         -> Cookie.apply
   )
 
   def fromKeyValuePairZIO(name: String, value: String): ZIO[Any, Nothing, Header] =

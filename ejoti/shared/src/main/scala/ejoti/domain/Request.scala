@@ -34,6 +34,12 @@ final case class Request[Body](
   lazy val completeUrl =
     s"http://$host/${Request.pathAndQuery.createPart(UrlMatching(segments.map(_.content), params))}"
 
+  lazy val cookies: Header.Cookie = headers
+    .collectFirst { case cookie: Header.Cookie =>
+      cookie
+    }
+    .getOrElse(Header.Cookie(""))
+
   def copyChangeBody[Body0](newBody: Body0): Request[Body0] = Request(method, headers, segments, params, host, newBody)
 
   def bodyAsString(using ev: Body <:< ZStream[Any, Nothing, Byte]): ZIO[Any, Nothing, String] =

@@ -15,7 +15,7 @@ object TestResponse {
 
   def fromResponseZIO[Body](response: Response, makeBody: Chunk[Byte] => Body): ZIO[Any, Nothing, TestResponse[Body]] =
     for {
-      body <- response.body.runCollect.map(_.flatten).map(makeBody)
+      body <- response.body.runCollect.map(makeBody)
     } yield TestResponse(response.status, response.headers, body)
 
 }

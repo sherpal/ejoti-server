@@ -15,6 +15,7 @@ import urldsl.errors.DummyError
 import ejoti.domain.Node.given
 import ejoti.domain.CollectedInfo.given
 import ejoti.domain.Node.*
+import zio.stream.ZStream
 
 final class FileDownloadNode(chunkSize: Int = FileDownloadNode.defaultChunkSize)
     extends Node[Any, EmptyTuple, Response, Singleton[Path]] {
@@ -34,7 +35,7 @@ final class FileDownloadNode(chunkSize: Int = FileDownloadNode.defaultChunkSize)
         Response(
           Status.Ok,
           List(FileDownloadNode.contentTypeFromExt(path)),
-          zFilesBytes.map(chunk => zio.Chunk.fromArray(chunk.toArray)).orDie
+          zFilesBytes.map(chunk => zio.Chunk.fromArray(chunk.toArray)).flatMap(ZStream.fromChunk).orDie
         )
       ),
       ZIO.succeed(Response.NotFound)

@@ -164,23 +164,23 @@ object NodeSpecs extends ZIOSpecDefault {
           postMessage <- server
             .handleRequest(TestRequest.fromMethod(HttpMethod.POST))
             .flatMap(_.body.runCollect)
-            .map(_.flatten.asString)
+            .map(_.asString)
           getMessage <- server
             .handleRequest(TestRequest.fromMethod(HttpMethod.GET))
             .flatMap(_.body.runCollect)
-            .map(_.flatten.asString)
+            .map(_.asString)
           patchMessage <- server
             .handleRequest(TestRequest.fromMethod(HttpMethod.PATCH))
             .flatMap(_.body.runCollect)
-            .map(_.flatten.asString)
+            .map(_.asString)
           deleteMessage <- server
             .handleRequest(TestRequest.fromMethod(HttpMethod.DELETE))
             .flatMap(_.body.runCollect)
-            .map(_.flatten.asString)
+            .map(_.asString)
           optionsMessage <- server
             .handleRequest(TestRequest.fromMethod(HttpMethod.OPTIONS))
             .flatMap(_.body.runCollect)
-            .map(_.flatten.asString)
+            .map(_.asString)
         } yield assertTrue(
           postMessage    == "It was POST!",
           getMessage     == "It was GET!",
@@ -203,7 +203,7 @@ object NodeSpecs extends ZIOSpecDefault {
             .asSome
             .map(_.collect { case response: Response => response })
             .someOrFailException
-          responseBody <- probablyResponse.body.runCollect.map(_.flatten).map(_.asString)
+          responseBody <- probablyResponse.body.runCollect.map(_.asString)
         } yield assertTrue(responseBody == "hello")
 
       },
@@ -234,13 +234,17 @@ object NodeSpecs extends ZIOSpecDefault {
           .withProofOf[HttpMethod.POST]
 
         val getNode = Node
-          .failingEitherNode((id: Long) => ZIO.succeed(data.get(id).toRight(Response.NotFound)))
+          .failingEitherNode((id: CollectedInfo[Node.Singleton[Long]]) =>
+            ZIO.succeed(data.get(id.access[Long]).toRight(Response.NotFound))
+          )
           .outlet[0]
           .attach(Node.okString)
           .withProofOf[HttpMethod.GET]
 
         val patchNode = Node
-          .failingEitherNode((id: Long) => ZIO.succeed(data.get(id).toRight(Response.NotFound)))
+          .failingEitherNode((id: CollectedInfo[Node.Singleton[Long]]) =>
+            ZIO.succeed(data.get(id.access[Long]).toRight(Response.NotFound))
+          )
           .provide[Request.RawRequest *: EmptyTuple]
           .outlet[0]
           .attach(Node.decodeBodyAsString)
@@ -284,12 +288,12 @@ object NodeSpecs extends ZIOSpecDefault {
           createRequest  <- ZIO.succeed(baseRequest.withMethod(HttpMethod.POST).withStreamBodyAsString("my-data"))
           createResponse <- server.handleRequest(createRequest)
           getRequest     <- ZIO.succeed(baseRequest)
-          getResponse    <- server.handleRequest(getRequest).flatMap(_.body.runCollect).map(_.flatten.asString)
+          getResponse    <- server.handleRequest(getRequest).flatMap(_.body.runCollect).map(_.asString)
           patchRequest  <- ZIO.succeed(baseRequest.withMethod(HttpMethod.PATCH).withStreamBodyAsString("my-other-data"))
           patchResponse <- server.handleRequest(patchRequest)
           wrongPatchRequest  <- ZIO.succeed(wrongBaseRequest.withMethod(HttpMethod.PATCH).withStreamBodyAsString("meh"))
           wrongPatchResponse <- server.handleRequest(wrongPatchRequest)
-          getResponse2       <- server.handleRequest(getRequest).flatMap(_.body.runCollect).map(_.flatten.asString)
+          getResponse2       <- server.handleRequest(getRequest).flatMap(_.body.runCollect).map(_.asString)
           deleteRequest      <- ZIO.succeed(baseRequest.withMethod(HttpMethod.DELETE))
           deleteResponse     <- server.handleRequest(deleteRequest)
           getResponse3       <- server.handleRequest(getRequest)
@@ -301,6 +305,29 @@ object NodeSpecs extends ZIOSpecDefault {
           getResponse2                   == "my-other-data",
           deleteResponse.status.code     == 200,
           getResponse3.status.code       == 404
+        )
+      },
+      test("Squash two first outlets") {
+        val node1 =
+          Node.eitherNode((info: CollectedInfo[Singleton[Int]]) => Either.cond(info.access[Int] % 3 == 0, false, info))
+        val node2 = Node.eitherNode((info: CollectedInfo[Singleton[Int]]) =>
+          Either.cond(info.access[Int] % 2 == 0, "", BigInt(5))
+        )
+
+        val node = node1.outlet[1].attach(node2).squashFirstAndSecondOutlets
+
+        val exittingFirstZIO  = node.outIfIndex[0](CollectedInfo.empty.add(1))
+        val exittingSecondZIO = node.outIfIndex[0](CollectedInfo.empty.add(3))
+        val exittingThirdZIO  = node.outIfIndex[1](CollectedInfo.empty.add(0))
+
+        for {
+          exittingFirst  <- exittingFirstZIO
+          exittingSecond <- exittingSecondZIO
+          exittingThird  <- exittingThirdZIO
+        } yield assertTrue(
+          exittingFirst                       == Some(()),
+          exittingSecond                      == Some(()),
+          exittingThird.map(_.access[String]) == Some("")
         )
       }
     )

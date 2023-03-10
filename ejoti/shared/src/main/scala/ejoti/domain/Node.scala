@@ -22,6 +22,7 @@ import java.net.http.HttpResponse.ResponseInfo
 import ejoti.domain.nodeast.*
 import fs2.io.file.Path
 import scala.deriving.Mirror
+import scala.Tuple.Concat
 
 trait Node[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple] {
   self =>
@@ -66,8 +67,59 @@ trait Node[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple] {
 
       }
 
+  def squashFirstAndSecondOutlets(using Typeable[Exit]): Node[R, Unit *: Tuple.Drop[X, 2], Exit, IncomingInfo] =
+    new Node[R, Unit *: Tuple.Drop[X, 2], Exit, IncomingInfo] {
+      def out(collectedInfo: CollectedInfo[IncomingInfo]): ZIO[R, Nothing, Choices[Unit *: Tuple.Drop[X, 2]] | Exit] =
+        self.out(collectedInfo).map {
+          case exit: Exit => exit
+          case other: Choices[X] @unchecked if other.idx <= 1 =>
+            Value((), 0).asInstanceOf[Choices[Unit *: Tuple.Drop[X, 2]]]
+          case other: Choices[X] @unchecked =>
+            Value(other.value, other.idx - 1).asInstanceOf[Choices[Unit *: Tuple.Drop[X, 2]]]
+        }
+    }
+
   class OutletFiller[Idx <: Int](using v: ValueOf[Idx]) {
     private val idx = summon[ValueOf[Idx]].value
+
+    def map[U](
+        f: CollectedInfo[
+          CollectedInfo.FlattenedConcat[IncomingInfo, Node.ElemOrNothing[X, Idx]]
+        ] => U
+    )(using Typeable[Exit]) = mapZIO(f andThen ZIO.succeed)
+
+    def mapZIO[R0 <: R, U](
+        f: CollectedInfo[
+          CollectedInfo.FlattenedConcat[IncomingInfo, Node.ElemOrNothing[X, Idx]]
+        ] => ZIO[R0, Nothing, U]
+    )(using Typeable[Exit]) = attach(MappingCollectedInfoZIONode(f))
+
+    def mapZIOOrExit[R0 <: R, Exit1 <: ExitType, U](
+        f: CollectedInfo[
+          CollectedInfo.FlattenedConcat[IncomingInfo, Node.ElemOrNothing[X, Idx]]
+        ] => ZIO[R0, Exit1, U]
+    )(using Typeable[Exit], Typeable[Exit1]) = attach(MappingCollectedInfoZIOOrExitNode(f))
+
+    def tapZIO[R0 <: R](
+        f: CollectedInfo[
+          CollectedInfo.FlattenedConcat[IncomingInfo, Node.ElemOrNothing[X, Idx]]
+        ] => ZIO[R0, Nothing, Unit]
+    )(using Typeable[Exit]) = mapZIO(f)
+
+    def exit[Exit1 <: ExitType](
+        f: CollectedInfo[
+          CollectedInfo.FlattenedConcat[IncomingInfo, Node.ElemOrNothing[X, Idx]]
+        ] => Exit1
+    )(using Typeable[Exit], Typeable[Exit1]) = exitZIO(f andThen ZIO.succeed)
+
+    def exitWith[Exit1 <: ExitType](e: Exit1)(using Typeable[Exit], Typeable[Exit1]) = exit(_ => e)
+
+    def exitZIO[R0 <: R, Exit1 <: ExitType](
+        f: CollectedInfo[
+          CollectedInfo.FlattenedConcat[IncomingInfo, Node.ElemOrNothing[X, Idx]]
+        ] => ZIO[R0, Nothing, Exit1]
+    )(using Typeable[Exit], Typeable[Exit1]) = close(ExitZIONode(f))
+
     def attach[R0 <: R, Y <: Tuple, Exit1 <: ExitType](
         that: Node[R0, Y, Exit1, CollectedInfo.FlattenedConcat[IncomingInfo, ElemOrNothing[X, Idx]]]
     )(using
@@ -210,9 +262,11 @@ object Node {
       f: CollectedInfo[In] => Either[Left, Right]
   ): Node[Any, Left *: Right *: EmptyTuple, Nothing, In] = EitherNode(f)
 
-  def failingEitherNode[T, In, Exit <: ExitType](
-      f: In => ZIO[Any, Nothing, Either[Exit, T]]
-  ): Node[Any, T *: EmptyTuple, Exit, In *: EmptyTuple] = new FailingEitherNode(f)
+  def absolveNode[E, A] = eitherNode((in: CollectedInfo[Node.Singleton[Either[E, A]]]) => in.access[Either[E, A]])
+
+  def failingEitherNode[T, In <: Tuple, Exit <: ExitType](
+      f: CollectedInfo[In] => ZIO[Any, Nothing, Either[Exit, T]]
+  ): Node[Any, T *: EmptyTuple, Exit, In] = new FailingEitherNode(f)
 
   def leaf[R, In, Exit <: ExitType](f: In => ZIO[R, Nothing, Exit]): Node[R, EmptyTuple, Exit, Singleton[In]] =
     (in: CollectedInfo[Singleton[In]]) => f(in.access[In])
@@ -223,6 +277,14 @@ object Node {
   def mappingNode[T, U](f: T => U): Node[Any, U *: EmptyTuple, Nothing, T *: EmptyTuple] =
     MappingNode(f)
 
+  def mappingZIONode[R, T, U](f: T => ZIO[R, Nothing, U]): Node[R, Singleton[U], Nothing, Singleton[T]] =
+    MappingZIONode(f)
+
+  def mappingZIOOrExitNode[R, T, U, Exit <: ExitType](
+      f: T => ZIO[R, Exit, U]
+  ): Node[R, Singleton[U], Exit, Singleton[T]] =
+    MappingZIOOrExitNode(f)
+
   def identityNode[Incoming <: Tuple]: Node[Any, CollectedInfo[Incoming] *: EmptyTuple, Nothing, Incoming] =
     new IdentityNode[Incoming]
 
@@ -230,8 +292,10 @@ object Node {
     identityNode[Singleton[In]]
 
   def addJsonNode[T](using Decoder[T]): Node[Any, Singleton[T], Response, Singleton[RawRequest]] =
-    failingEitherNode { (request: RawRequest) =>
-      request.bodyAsString
+    failingEitherNode { (request: CollectedInfo[Singleton[RawRequest]]) =>
+      request
+        .access[RawRequest]
+        .bodyAsString
         .map(decode[T](_))
         .absolve
         .mapError(error =>
@@ -314,6 +378,59 @@ object Node {
       Node.eitherNode((req: CollectedInfo[Singleton[RawRequest]]) =>
         params.matchParams(req.access[RawRequest].params).left.map(_ => CollectedInfo.empty).map(_.output)
       )
+  }
+
+  object body {
+
+    def formField[Q](params: QueryParameters[Q, DummyError]) = Node.mappingZIOOrExitNode((req: RawRequest) =>
+      for {
+        _ <- ZIO.unless(req.headers.contains[Header](Header.ContentType.`application/x-www-form-urlencoded`))(
+          ZIO.fail(
+            Response.BadRequest.withBodyString(
+              s"Missing header ${Header.ContentType.`application/x-www-form-urlencoded`.prettyPrint}"
+            )
+          )
+        )
+        stringBody <- req.bodyAsString
+        q          <- ZIO.from(params.matchQueryString(stringBody)).orElseFail(Response.BadRequest)
+      } yield q
+    )
+
+  }
+
+  object requestmetadata {
+    def cookie[E, C](cookieName: String, makeCookieData: String => Either[E, C]) =
+      Node.eitherNode((req: CollectedInfo[Singleton[RawRequest]]) =>
+        req.access[RawRequest].cookies.cookies.get(cookieName).map(makeCookieData) match {
+          case None           => Left(Option.empty[E])
+          case Some(Right(c)) => Right(c)
+          case Some(Left(e))  => Left(Some(e))
+        }
+      )
+  }
+
+  object methods {
+    def apply(methods: HttpMethod*) = eitherNode((in: CollectedInfo[Singleton[RawRequest]]) =>
+      Either.cond(
+        methods.contains[HttpMethod](in.access[RawRequest].method),
+        in.access[RawRequest].method,
+        CollectedInfo.empty
+      )
+    )
+
+    private def isMethod[Method](using Typeable[Method]) = eitherNode((in: CollectedInfo[Singleton[RawRequest]]) =>
+      in.access[RawRequest].method match {
+        case m: Method => Right(m)
+        case _         => Left(CollectedInfo.empty)
+      }
+    )
+
+    def get     = isMethod[GET]
+    def post    = isMethod[POST]
+    def put     = isMethod[PUT]
+    def patch   = isMethod[PATCH]
+    def delete  = isMethod[DELETE]
+    def options = isMethod[OPTIONS]
   }
 
   def crudNode: Node[Any, HttpMethod.CRUD, Response, Singleton[RawRequest]] = CrudNode

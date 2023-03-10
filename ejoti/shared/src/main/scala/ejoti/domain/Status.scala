@@ -28,6 +28,8 @@ object Status {
   def Ok: Status[200]                = status
   def TemporaryRedirect: Status[307] = status
   def BadRequest: Status[400]        = status
+  def Unauthorized: Status[401]      = status
+  def Forbidden: Status[403]         = status
   def NotFound: Status[404]          = status
   def MethodNotAllowed: Status[405]  = status
   def Internal: Status[500]          = status
