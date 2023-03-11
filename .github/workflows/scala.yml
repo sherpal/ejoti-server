@@ -23,3 +23,5 @@ jobs:
         distribution: 'adopt'
     - name: Run tests
       run: sbt test
+    - name: Make a local publishing
+      run: sbt publishLocal

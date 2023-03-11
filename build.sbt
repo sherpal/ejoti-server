@@ -58,7 +58,8 @@ lazy val server = (project in file("./server"))
     name := "server",
     jsEnv := new org.scalajs.jsenv.nodejs.NodeJSEnv,
     scalaJSUseMainModuleInitializer := true,
-    scalaJSLinkerConfig ~= (_.withModuleKind(ModuleKind.ESModule))
+    scalaJSLinkerConfig ~= (_.withModuleKind(ModuleKind.ESModule)),
+    publish / skip := true
   )
   .dependsOn(Ejoti.js)
 
