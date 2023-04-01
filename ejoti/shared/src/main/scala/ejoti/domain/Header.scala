@@ -1,6 +1,7 @@
 package ejoti.domain
 
 import zio.ZIO
+import scala.concurrent.duration.*
 
 /** Represents a Http header */
 sealed trait Header(val name: String, val value: String) {
@@ -47,6 +48,36 @@ object Header {
       .toMap
   }
   case class SetCookie(cookie: HttpCookie) extends Header("Set-Cookie", cookie.setCookieValue)
+  case class CacheControl(rawValue: String) extends Header("Cache-Control", rawValue)
+  object CacheControl {
+    val oneWeek = Some(7.days)
+    val oneDay  = Some(1.day)
+    def apply(maxAge: Option[FiniteDuration] = None): CacheControl = CacheControl(
+      List(
+        maxAge.map(age => s"max-age=${age.toSeconds}")
+      ).flatten.mkString(", ")
+    )
+  }
+  sealed trait ETag(override val value: String) extends Header {
+    def actualValue: String
+  }
+  case class StrongETag(actualValue: String)
+      extends ETag(s""""$actualValue"""")
+      with Header("ETag", s""""$actualValue"""")
+  case class WeakETag(actualValue: String)
+      extends ETag(s"""W/"$actualValue"""")
+      with Header("ETag", s"""W/"$actualValue"""")
+  object ETag {
+    def weak(value: String): ETag   = WeakETag(value)
+    def strong(value: String): ETag = StrongETag(value)
+
+    def fromRawValue(rawValue: String): ETag = {
+      import scala.language.unsafeNulls
+      val isWeak = rawValue.startsWith("W")
+      if isWeak then weak(rawValue.substring(3, rawValue.length - 1))
+      else strong(rawValue.substring(1, rawValue.length - 1))
+    }
+  }
 
   case class RawHeader(override val name: String, override val value: String) extends Header(name, value)
 
@@ -59,7 +90,9 @@ object Header {
     "upgrade"        -> Upgrade.apply,
     "origin"         -> Origin.apply,
     "location"       -> Location.apply,
-    "cookie"         -> Cookie.apply
+    "cookie"         -> Cookie.apply,
+    "cache-control"  -> CacheControl.apply,
+    "etag"           -> ETag.fromRawValue
   )
 
   def fromKeyValuePairZIO(name: String, value: String): ZIO[Any, Nothing, Header] =
