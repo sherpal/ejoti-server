@@ -6,6 +6,7 @@ import urldsl.vocabulary.{Param, ParamMatchOutput, Segment, UrlMatching}
 import zio.{Chunk, ZIO}
 import zio.stream.ZStream
 import urldsl.language.PathSegment
+import scala.reflect.Typeable
 
 /** Represents an incoming Request from a client.
   *
@@ -50,6 +51,8 @@ final case class Request[Body](
 
   def mapBody[R, Body0](f: Body => ZIO[R, Nothing, Body0]): ZIO[R, Nothing, Request[Body0]] =
     f(body).map(copyChangeBody[Body0])
+
+  def maybeHeader[H <: Header](using Typeable[H]): Option[H] = headers.collectFirst { case h: H => h }
 
   // methods below are intended to be used in tests only
 

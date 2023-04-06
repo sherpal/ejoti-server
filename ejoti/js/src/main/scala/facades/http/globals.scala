@@ -28,8 +28,8 @@ def uint8ArrayToChunk(uint8Array: Uint8Array): Chunk[Byte] =
 private[http] def handleNodeResponseFromEjotiResponse(
     jsResponse: Response,
     response: ejoti.domain.Response
-): ZIO[Any, Nothing, Unit] = for {
-  _ <- ZIO.succeed(jsResponse.writeHead(response.status, response.headers))
+): ZIO[Any, Nothing, Unit] = (for {
+  _ <- ZIO.succeed(jsResponse.writeHead(response.status, response.headers.toList))
   _ <- response.body.chunks.runForeach(chunk => ZIO.succeed(jsResponse.write(chunk)))
   _ <- ZIO.succeed(jsResponse.end())
-} yield ()
+} yield ()).ensuring(response.finalizer)

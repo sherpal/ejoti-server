@@ -18,6 +18,7 @@ import ejoti.domain.Node.*
 import zio.stream.ZStream
 import fs2.io.file.FileKey
 import fs2.io.file.BasicFileAttributes
+import ejoti.domain.Header.Headers
 
 final class FileDownloadNode(chunkSize: Int = FileDownloadNode.defaultChunkSize)
     extends Node[Any, EmptyTuple, Response, Singleton[Path]] {
@@ -45,8 +46,9 @@ final class FileDownloadNode(chunkSize: Int = FileDownloadNode.defaultChunkSize)
           )
       } yield Response(
         Status.Ok,
-        List(FileDownloadNode.contentTypeFromExt(path), etag),
-        zFilesBytes.map(chunk => zio.Chunk.fromArray(chunk.toArray)).flatMap(ZStream.fromChunk).orDie
+        Headers(FileDownloadNode.contentTypeFromExt(path), etag),
+        zFilesBytes.map(chunk => zio.Chunk.fromArray(chunk.toArray)).flatMap(ZStream.fromChunk).orDie,
+        ZIO.unit
       ),
       ZIO.succeed(Response.NotFound)
     )

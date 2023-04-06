@@ -23,6 +23,7 @@ import ejoti.domain.nodeast.*
 import fs2.io.file.Path
 import scala.deriving.Mirror
 import scala.Tuple.Concat
+import ejoti.domain.Header.Headers
 
 trait Node[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple] {
   self =>
@@ -48,7 +49,12 @@ trait Node[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple] {
   def mapResponse(f: Response => Response)(using ev: Exit =:= Response)(using
       Typeable[Exit]
   ): Node[R, X, Response, IncomingInfo] =
-    new ResponseMappedNode(this, f compose ev)
+    new ResponseMappedNode(this, (_, exit) => f(ev(exit)))
+
+  def mapResponseUsingInfo(f: (CollectedInfo[IncomingInfo], Response) => Response)(using ev: Exit =:= Response)(using
+      Typeable[Exit]
+  ): Node[R, X, Response, IncomingInfo] =
+    new ResponseMappedNode(this, (info, exit) => f(info, ev(exit)))
 
   def out(collectedInfo: CollectedInfo[IncomingInfo]): ZIO[R, Nothing, Choices[X] | Exit]
 
@@ -301,7 +307,7 @@ object Node {
         .mapError(error =>
           Response.fromBodyString(
             Status.BadRequest,
-            Nil,
+            Headers.empty,
             Option {
               import scala.language.unsafeNulls
               error.getMessage
@@ -331,7 +337,7 @@ object Node {
   val notFound                      = leafFromResponse(Response.NotFound)
   val methodNotAllowed              = leafFromResponse(Response.MethodNotAllowed)
 
-  val okString = leaf((message: String) => ZIO.succeed(Response.fromBodyString(Status.Ok, Nil, message)))
+  val okString = leaf((message: String) => ZIO.succeed(Response.fromBodyString(Status.Ok, Headers.empty, message)))
 
   object navigation {
     sealed trait UnusedSegments {
@@ -395,6 +401,8 @@ object Node {
         q          <- ZIO.from(params.matchQueryString(stringBody)).orElseFail(Response.BadRequest)
       } yield q
     )
+
+    def multipartOrFail = MultipartFormDataBodyNode.multipartOrFail
 
   }
 
