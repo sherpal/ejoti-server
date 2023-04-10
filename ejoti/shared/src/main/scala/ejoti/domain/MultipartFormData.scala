@@ -57,16 +57,10 @@ object MultipartFormData {
   object BodyParts {
 
     def findSliceIndex[T](chunk: Chunk[T], slice: Chunk[T]): Int = {
-      var index       = 0
-      var found       = false
       val firstT      = slice(0)
       val sliceLength = slice.length
       val chunkLength = chunk.length
-      while (!found && index < chunkLength) {
-        if chunk(index) == firstT then found = chunk.slice(index, index + sliceLength) == slice
-        if !found then index += 1
-      }
-      if index == chunkLength then -1 else index
+      chunk.zipWithIndex.find((t, idx) => t == firstT && chunk.slice(idx, idx + sliceLength) == slice).fold(-1)(_._2)
     }
 
     import scala.language.unsafeNulls
