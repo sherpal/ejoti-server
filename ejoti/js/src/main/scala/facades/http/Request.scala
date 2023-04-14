@@ -9,6 +9,7 @@ import scala.scalajs.js
 import scala.scalajs.js.typedarray.Uint8Array
 import scala.scalajs.js.annotation.JSName
 import facades.node.EventEmitter
+import ejoti.domain.Header.Headers
 
 @js.native
 trait Request extends EventEmitter {
@@ -67,7 +68,7 @@ object Request {
         .orElseFail(new IllegalStateException(s"No host header"))
         .orDie
       urlStringParser <- ZIO.succeed(urlStringParserGenerator.parser(s"http://$host${req.url}"))
-    } yield ejoti.domain.Request(method, headers, urlStringParser.segments, urlStringParser.params, host, body)
+    } yield ejoti.domain.Request(method, Headers(headers), urlStringParser.segments, urlStringParser.params, host, body)
   }
 
 }

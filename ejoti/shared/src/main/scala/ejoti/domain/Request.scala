@@ -7,6 +7,7 @@ import zio.{Chunk, ZIO}
 import zio.stream.ZStream
 import urldsl.language.PathSegment
 import scala.reflect.Typeable
+import ejoti.domain.Header.Headers
 
 /** Represents an incoming Request from a client.
   *
@@ -25,7 +26,7 @@ import scala.reflect.Typeable
   */
 final case class Request[Body](
     method: HttpMethod,
-    headers: Vector[Header],
+    headers: Headers,
     segments: List[Segment],
     params: Map[String, Param],
     host: String,
@@ -35,11 +36,7 @@ final case class Request[Body](
   lazy val completeUrl =
     s"http://$host/${Request.pathAndQuery.createPart(UrlMatching(segments.map(_.content), params))}"
 
-  lazy val cookies: Header.Cookie = headers
-    .collectFirst { case cookie: Header.Cookie =>
-      cookie
-    }
-    .getOrElse(Header.Cookie(""))
+  lazy val cookies: Header.Cookie = headers.maybeHeaderOfType[Header.Cookie].getOrElse(Header.Cookie(""))
 
   def copyChangeBody[Body0](newBody: Body0): Request[Body0] = Request(method, headers, segments, params, host, newBody)
 
@@ -52,7 +49,9 @@ final case class Request[Body](
   def mapBody[R, Body0](f: Body => ZIO[R, Nothing, Body0]): ZIO[R, Nothing, Request[Body0]] =
     f(body).map(copyChangeBody[Body0])
 
-  def maybeHeader[H <: Header](using Typeable[H]): Option[H] = headers.collectFirst { case h: H => h }
+  def maybeHeader[H <: Header](using Typeable[H]): Option[H] = headers.maybeHeaderOfType
+
+  def hasHeader(header: Header): Boolean = headers.hasHeader(header)
 
   // methods below are intended to be used in tests only
 
@@ -91,5 +90,7 @@ object Request {
     }
     (root / remainingSegments) ? query
   }
+
+  given [A]: Conversion[Request[A], Headers] = _.headers
 
 }

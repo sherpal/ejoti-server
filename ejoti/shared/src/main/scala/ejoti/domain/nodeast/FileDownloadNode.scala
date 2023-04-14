@@ -19,37 +19,51 @@ import zio.stream.ZStream
 import fs2.io.file.FileKey
 import fs2.io.file.BasicFileAttributes
 import ejoti.domain.Header.Headers
+import ejoti.domain.Request.RawRequest
+import ejoti.domain.Header.StrongETag
+import ejoti.domain.Header.WeakETag
 
 final class FileDownloadNode(chunkSize: Int = FileDownloadNode.defaultChunkSize)
-    extends Node[Any, EmptyTuple, Response, Singleton[Path]] {
+    extends Node[Any, EmptyTuple, Response, Path *: Headers *: EmptyTuple] {
 
   type IO[+A] = Task[A]
 
   lazy val files = Files[IO]
 
-  def out(collectedInfo: CollectedInfo[Singleton[Path]]): ZIO[Any, Nothing, Response] = {
-    val path = collectedInfo.access[Path]
+  def out(collectedInfo: CollectedInfo[Path *: Headers *: EmptyTuple]): ZIO[Any, Nothing, Response] = {
+    val path             = collectedInfo.access[Path]
+    val headers          = collectedInfo.access[Headers]
+    val maybeIfNoneMatch = headers.maybeHeaderOfType[Header.IfNoneMatch]
 
-    val filesBytes: Stream[IO, fs2.Chunk[Byte]] = files.readAll(path, chunkSize, Flags.Read).chunks
-    val zFilesBytes                             = filesBytes.toZStream()
+    lazy val filesBytes: Stream[IO, fs2.Chunk[Byte]] = files.readAll(path, chunkSize, Flags.Read).chunks
+    lazy val zFilesBytes                             = filesBytes.toZStream()
 
     ZIO.ifZIO(files.exists(path).orDie)(
       for {
-        basicFileAttributes <- files
+        maybeBasicFileAttributes <- files
           .getBasicFileAttributes(path)
           .map(Some(_))
           .orElse(ZIO.succeed(Option.empty[BasicFileAttributes]))
-        etag = basicFileAttributes
+        etag = maybeBasicFileAttributes
           .flatMap(_.fileKey)
           .fold[Header.ETag](Header.ETag.weak(path.toString.hashCode().toString))((fileKey: FileKey) =>
             Header.ETag.strong(fileKey.hashCode().toString)
           )
-      } yield Response(
-        Status.Ok,
-        Headers(FileDownloadNode.contentTypeFromExt(path), etag),
-        zFilesBytes.map(chunk => zio.Chunk.fromArray(chunk.toArray)).flatMap(ZStream.fromChunk).orDie,
-        ZIO.unit
-      ),
+        ifNoneMatchMatched = maybeIfNoneMatch.map(_.value).contains[String](etag.value)
+        headers = Headers(
+          List(FileDownloadNode.contentTypeFromExt(path), etag, Header.CacheControl.noCache) ++ maybeBasicFileAttributes
+            .map(attributes => Header.ContentLength(attributes.size))
+        )
+      } yield
+        if ifNoneMatchMatched then Response.NotModified
+        else
+          Response(
+            Status.Ok,
+            headers,
+            zFilesBytes.map(chunk => zio.Chunk.fromArray(chunk.toArray)).flatMap(ZStream.fromChunk).orDie,
+            ZIO.unit
+          )
+      ,
       ZIO.succeed(Response.NotFound)
     )
 
@@ -64,10 +78,15 @@ object FileDownloadNode {
         .mappingNode((segments: Node.navigation.UnusedSegments) =>
           staticFolder / Path(segments.segments.map(_.content).mkString("/"))
         )
+        .provide[Node.Singleton[RawRequest]]
         .outlet[0]
         .attach(Node.sendFile(chunkSize))
 
-    val navigationNode = Node.navigation.initialSegments.outlet[0].attach(Node.navigation.pathPrefix(prefix))
+    val navigationNode = Node.navigation.initialSegments
+      .outlet[0]
+      .map(info => info.access[Request.RawRequest].maybeHeader[Header.ETag])
+      .outlet[0]
+      .attach(Node.navigation.pathPrefix(prefix))
 
     navigationNode.outlet[1].attach(fileDownloadLeaf)
   }

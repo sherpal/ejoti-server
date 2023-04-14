@@ -13,12 +13,12 @@ sealed trait Header(val name: String, val value: String) {
 
 object Header {
 
-  opaque type Headers = List[Header]
+  opaque type Headers <: List[Header] = List[Header]
 
   object Headers {
-    def apply(headers: List[Header]): Headers = headers
+    inline def apply(headers: Seq[Header]): Headers = headers.toList
 
-    def apply(headers: Header*): Headers = apply(headers.toList)
+    inline def apply(headers: Header*)(using DummyImplicit): Headers = apply(headers)
 
     def empty: Headers = Nil
 
@@ -71,7 +71,11 @@ object Header {
 
       def addHeader(header: Header): Headers = header +: headers
 
-      inline def toList: List[Header] = headers
+      def maybeHeaderOfType[T <: Header](using Typeable[T]): Option[T] = headers.collectFirst { case t: T =>
+        t
+      }
+
+      def hasHeader(header: Header): Boolean = headers.contains[Header](header)
     }
   }
 
@@ -133,6 +137,8 @@ object Header {
         maxAge.map(age => s"max-age=${age.toSeconds}")
       ).flatten.mkString(", ")
     )
+
+    lazy val noCache: CacheControl = CacheControl("no-cache")
   }
   sealed trait ETag(override val value: String) extends Header {
     def actualValue: String
@@ -161,6 +167,8 @@ object Header {
       contentDispositionParamsRegex.findAllIn(rawValue).map { case s"""$name="$value"""" => name -> value }.toMap
   }
 
+  case class IfNoneMatch(override val value: String) extends Header("If-None-Match", value)
+
   case class RawHeader(override val name: String, override val value: String) extends Header(name, value)
 
   private val nameToDomain: Map[String, String => Header] = Map(
@@ -175,7 +183,8 @@ object Header {
     "cookie"              -> Cookie.apply,
     "cache-control"       -> CacheControl.apply,
     "etag"                -> ETag.fromRawValue,
-    "content-disposition" -> ContentDisposition.apply
+    "content-disposition" -> ContentDisposition.apply,
+    "if-none-match"       -> IfNoneMatch.apply
   )
 
   def fromKeyValuePairZIO(name: String, value: String): ZIO[Any, Nothing, Header] =

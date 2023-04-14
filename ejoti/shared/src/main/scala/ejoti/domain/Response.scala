@@ -77,6 +77,7 @@ object Response {
   def BadRequest                    = empty(Status.BadRequest)
   def Unauthorized                  = empty(Status.Unauthorized)
   def Forbidden                     = empty(Status.Forbidden)
+  def NotModified                   = empty(Status.NotModified)
   def TemporaryRedirect(to: String) = empty(Status.TemporaryRedirect, Headers(Header.Location(to)))
   def NotFound                      = empty(Status.NotFound)
   def MethodNotAllowed              = empty(Status.MethodNotAllowed)
