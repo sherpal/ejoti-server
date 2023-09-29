@@ -463,17 +463,30 @@ object Node {
 
   def crudNode: Node[Any, HttpMethod.CRUD, Response, Singleton[RawRequest]] = CrudNode
 
+  def fileDownload = FileDownloadNode
+
   def sendFile(
-      chunkSize: Int = FileDownloadNode.defaultChunkSize
+      chunkSize: Int = fileDownload.defaultChunkSize
   ): Node[Any, EmptyTuple, Response, Path *: RawRequest *: EmptyTuple] = identityNode[Path *: RawRequest *: EmptyTuple]
     .outlet[0]
     .map(_.access[RawRequest].headers)
     .outlet[0]
-    .attach(new FileDownloadNode(chunkSize))
+    .attach(fileDownload.fileDownloadNodeOrNotFound(chunkSize))
+
+  def sendFileWithOutlet(
+      chunkSize: Int = fileDownload.defaultChunkSize
+  ): Node[Any, CollectedInfo[
+    (Unit, Headers, Path, RawRequest)
+  ] *: EmptyTuple, Response, Path *: RawRequest *: EmptyTuple] =
+    identityNode[Path *: RawRequest *: EmptyTuple]
+      .outlet[0]
+      .map(_.access[RawRequest].headers)
+      .outlet[0]
+      .attach(fileDownload.fileDownloadNode(chunkSize))
 
   def sendFixedFile(
       path: Path,
-      chunkSize: Int = FileDownloadNode.defaultChunkSize
+      chunkSize: Int = fileDownload.defaultChunkSize
   ): Node[Any, EmptyTuple, Response, Singleton[RawRequest]] =
     fromValue(path)
       .provide[Singleton[RawRequest]]

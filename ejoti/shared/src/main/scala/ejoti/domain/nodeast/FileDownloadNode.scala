@@ -24,13 +24,13 @@ import ejoti.domain.Header.StrongETag
 import ejoti.domain.Header.WeakETag
 
 final class FileDownloadNode(chunkSize: Int = FileDownloadNode.defaultChunkSize)
-    extends Node[Any, EmptyTuple, Response, Path *: Headers *: EmptyTuple] {
+    extends Node[Any, Unit *: EmptyTuple, Response, Path *: Headers *: EmptyTuple] {
 
   type IO[+A] = Task[A]
 
   lazy val files = Files[IO]
 
-  def out(collectedInfo: CollectedInfo[Path *: Headers *: EmptyTuple]): ZIO[Any, Nothing, Response] = {
+  def out(collectedInfo: CollectedInfo[Path *: Headers *: EmptyTuple]): ZIO[Any, Nothing, Response | Value[Unit, 0]] = {
     val path             = collectedInfo.access[Path]
     val headers          = collectedInfo.access[Headers]
     val maybeIfNoneMatch = headers.maybeHeaderOfType[Header.IfNoneMatch]
@@ -64,7 +64,7 @@ final class FileDownloadNode(chunkSize: Int = FileDownloadNode.defaultChunkSize)
             ZIO.unit
           )
       ,
-      ZIO.succeed(Response.NotFound)
+      ZIO.succeed(Value[Unit, 0]((), 0))
     )
 
   }
@@ -91,6 +91,14 @@ object FileDownloadNode {
     navigationNode.outlet[1].attach(fileDownloadLeaf)
   }
 
+  def fileDownloadNodeOrNotFound(chunkSize: Int = FileDownloadNode.defaultChunkSize) =
+    FileDownloadNode(chunkSize).outlet[0].attach(notFound)
+
+  def fileDownloadNode(
+      chunkSize: Int = FileDownloadNode.defaultChunkSize
+  ): Node[Any, Unit *: EmptyTuple, Response, Path *: Headers *: EmptyTuple] =
+    new FileDownloadNode(chunkSize)
+
   // todo, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Common_types
   def contentTypeFromExt(path: Path): Header.ContentType = path.extName.toLowerCase() match {
     case ".css"  => Header.ContentType.`text/css`
@@ -104,6 +112,7 @@ object FileDownloadNode {
     case ".pdf"  => Header.ContentType.`application/pdf`
     case ".svg"  => Header.ContentType.`image/svg+xml`
     case ".txt"  => Header.ContentType.`text/plain`
+    case ".png"  => Header.ContentType.`image/png`
     case _       => Header.ContentType.`application/octet-stream`
   }
 

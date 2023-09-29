@@ -105,6 +105,7 @@ object Header {
     lazy val `application/pdf`                   = Header.ContentType("application/pdf")
     lazy val `image/svg+xml`                     = Header.ContentType("image/svg+xml")
     lazy val `text/plain`                        = Header.ContentType("text/plain")
+    lazy val `image/png`                         = Header.ContentType("image/png")
     lazy val `application/x-www-form-urlencoded` = Header.ContentType("application/x-www-form-urlencoded")
   }
 
