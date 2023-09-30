@@ -13,6 +13,7 @@ import zio.{Unsafe, ZIO}
 import facades.websocket.{Connection, WebSocketRequest, WebSocketServer}
 import fs2.io.file.Path
 import fs2.io.file.Flags
+import ejoti.domain.nodeast.filedownload.FileDownloadSharedResource
 
 // Invoke-WebRequest -Uri http://localhost:3000/hello/stuff?hey=3 -Method POST -Body "hi"
 // Example http server
@@ -40,8 +41,12 @@ import fs2.io.file.Flags
 
   val webSocketServer = Node.leaf((req: Request.RawRequest) => ZIO.succeed(WebSocketResponse.echoWithLog))
 
+  val theLayer = zio.ZLayer.make[FileDownloadSharedResource](FileDownloadSharedResource.unlimited)
+
   val app =
-    ejoti.createServer(3000)(serverTree.asServer, ZIO.succeed(println("I'm on!")), webSocketServer.asWebSocketServer)
+    ejoti
+      .createServer(3000)(serverTree.asServer, ZIO.succeed(println("I'm on!")), webSocketServer.asWebSocketServer)
+      .provideLayer(theLayer)
 
   Unsafe.unsafe(implicit unsafe => zio.Runtime.default.unsafe.runToFuture(app))
   ()

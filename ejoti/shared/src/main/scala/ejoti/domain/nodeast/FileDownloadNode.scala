@@ -3,6 +3,7 @@ package ejoti.domain.nodeast
 import fs2.{text, Stream}
 import fs2.io.file.{Files, Path}
 import zio.interop.catz._
+import zio.Unsafe
 import zio.stream.interop.fs2z._
 import ejoti.domain.*
 import ejoti.domain.Node.*
@@ -22,15 +23,18 @@ import ejoti.domain.Header.Headers
 import ejoti.domain.Request.RawRequest
 import ejoti.domain.Header.StrongETag
 import ejoti.domain.Header.WeakETag
+import ejoti.domain.nodeast.filedownload.*
 
 final class FileDownloadNode(chunkSize: Int = FileDownloadNode.defaultChunkSize)
-    extends Node[Any, Unit *: EmptyTuple, Response, Path *: Headers *: EmptyTuple] {
+    extends Node[FileDownloadSharedResource, Unit *: EmptyTuple, Response, Path *: Headers *: EmptyTuple] {
 
   type IO[+A] = Task[A]
 
   lazy val files = Files[IO]
 
-  def out(collectedInfo: CollectedInfo[Path *: Headers *: EmptyTuple]): ZIO[Any, Nothing, Response | Value[Unit, 0]] = {
+  def out(
+      collectedInfo: CollectedInfo[Path *: Headers *: EmptyTuple]
+  ): ZIO[FileDownloadSharedResource, Nothing, Response | Value[Unit, 0]] = {
     val path             = collectedInfo.access[Path]
     val headers          = collectedInfo.access[Headers]
     val maybeIfNoneMatch = headers.maybeHeaderOfType[Header.IfNoneMatch]
@@ -54,16 +58,15 @@ final class FileDownloadNode(chunkSize: Int = FileDownloadNode.defaultChunkSize)
           List(FileDownloadNode.contentTypeFromExt(path), etag, Header.CacheControl.noCache) ++ maybeBasicFileAttributes
             .map(attributes => Header.ContentLength(attributes.size))
         )
-      } yield
-        if ifNoneMatchMatched then Response.NotModified
-        else
-          Response(
-            Status.Ok,
-            headers,
-            zFilesBytes.map(chunk => zio.Chunk.fromArray(chunk.toArray)).flatMap(ZStream.fromChunk).orDie,
-            ZIO.unit
-          )
-      ,
+        response <-
+          if ifNoneMatchMatched then ZIO.succeed(Response.NotModified)
+          else
+            for {
+              fileDownloadResourceService <- ZIO.service[FileDownloadSharedResource]
+              _                           <- fileDownloadResourceService.acquire
+              stream = zFilesBytes.map(chunk => zio.Chunk.fromArray(chunk.toArray)).flatMap(ZStream.fromChunk).orDie
+            } yield Response(Status.Ok, headers, stream, fileDownloadResourceService.release)
+      } yield response,
       ZIO.succeed(Value[Unit, 0]((), 0))
     )
 
@@ -96,7 +99,7 @@ object FileDownloadNode {
 
   def fileDownloadNode(
       chunkSize: Int = FileDownloadNode.defaultChunkSize
-  ): Node[Any, Unit *: EmptyTuple, Response, Path *: Headers *: EmptyTuple] =
+  ): Node[FileDownloadSharedResource, Unit *: EmptyTuple, Response, Path *: Headers *: EmptyTuple] =
     new FileDownloadNode(chunkSize)
 
   // todo, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Common_types

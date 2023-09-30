@@ -24,6 +24,7 @@ import fs2.io.file.Path
 import scala.deriving.Mirror
 import scala.Tuple.Concat
 import ejoti.domain.Header.Headers
+import ejoti.domain.nodeast.filedownload.FileDownloadSharedResource
 
 trait Node[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple] {
   self =>
@@ -467,15 +468,16 @@ object Node {
 
   def sendFile(
       chunkSize: Int = fileDownload.defaultChunkSize
-  ): Node[Any, EmptyTuple, Response, Path *: RawRequest *: EmptyTuple] = identityNode[Path *: RawRequest *: EmptyTuple]
-    .outlet[0]
-    .map(_.access[RawRequest].headers)
-    .outlet[0]
-    .attach(fileDownload.fileDownloadNodeOrNotFound(chunkSize))
+  ): Node[FileDownloadSharedResource, EmptyTuple, Response, Path *: RawRequest *: EmptyTuple] =
+    identityNode[Path *: RawRequest *: EmptyTuple]
+      .outlet[0]
+      .map(_.access[RawRequest].headers)
+      .outlet[0]
+      .attach(fileDownload.fileDownloadNodeOrNotFound(chunkSize))
 
   def sendFileWithOutlet(
       chunkSize: Int = fileDownload.defaultChunkSize
-  ): Node[Any, CollectedInfo[
+  ): Node[FileDownloadSharedResource, CollectedInfo[
     (Unit, Headers, Path, RawRequest)
   ] *: EmptyTuple, Response, Path *: RawRequest *: EmptyTuple] =
     identityNode[Path *: RawRequest *: EmptyTuple]
@@ -487,7 +489,7 @@ object Node {
   def sendFixedFile(
       path: Path,
       chunkSize: Int = fileDownload.defaultChunkSize
-  ): Node[Any, EmptyTuple, Response, Singleton[RawRequest]] =
+  ): Node[FileDownloadSharedResource, EmptyTuple, Response, Singleton[RawRequest]] =
     fromValue(path)
       .provide[Singleton[RawRequest]]
       .outlet[0]
@@ -522,7 +524,7 @@ object Node {
       staticFolder: Path,
       prefix: PathSegment[Unit, DummyError],
       chunkSize: Int = FileDownloadNode.defaultChunkSize
-  ): Node[Any, Singleton[CollectedInfo.Empty], Response, Singleton[RawRequest]] =
+  ): Node[FileDownloadSharedResource, Singleton[CollectedInfo.Empty], Response, Singleton[RawRequest]] =
     FileDownloadNode.serveStatic(staticFolder, prefix, chunkSize)
 
   /** Same as serveStatic, but closes the open outlet with NotFound
@@ -531,7 +533,7 @@ object Node {
       staticFolder: Path,
       prefix: PathSegment[Unit, DummyError],
       chunkSize: Int = FileDownloadNode.defaultChunkSize
-  ): Node[Any, EmptyTuple, Response, Singleton[RawRequest]] =
+  ): Node[FileDownloadSharedResource, EmptyTuple, Response, Singleton[RawRequest]] =
     serveStatic(staticFolder, prefix, chunkSize).outlet[0].attach(notFound)
 
   def sealedDispatch[T](using mirror: Mirror.SumOf[T]): Node[Any, mirror.MirroredElemTypes, Nothing, Singleton[T]] =

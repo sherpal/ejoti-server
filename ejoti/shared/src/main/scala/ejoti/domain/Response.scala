@@ -47,7 +47,7 @@ final case class Response(
     *   a new [[Response]]
     */
   def ensuring(effect: => ZIO[Any, Nothing, Unit]): Response =
-    copy(finalizer = finalizer *> effect)
+    copy(finalizer = finalizer.ensuring(effect))
 }
 
 object Response {
