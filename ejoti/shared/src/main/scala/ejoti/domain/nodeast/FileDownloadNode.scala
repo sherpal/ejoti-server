@@ -32,6 +32,9 @@ final class FileDownloadNode(chunkSize: Int = FileDownloadNode.defaultChunkSize)
 
   lazy val files = Files[IO]
 
+  def doesFileExist(path: Path): ZIO[Any, Nothing, Boolean] =
+    ZIO.ifZIO(files.exists(path))(files.isDirectory(path).map(!_), ZIO.succeed(false)).orDie
+
   def out(
       collectedInfo: CollectedInfo[Path *: Headers *: EmptyTuple]
   ): ZIO[FileDownloadSharedResource, Nothing, Response | Value[Unit, 0]] = {
@@ -42,7 +45,7 @@ final class FileDownloadNode(chunkSize: Int = FileDownloadNode.defaultChunkSize)
     lazy val filesBytes: Stream[IO, fs2.Chunk[Byte]] = files.readAll(path, chunkSize, Flags.Read).chunks
     lazy val zFilesBytes                             = filesBytes.toZStream()
 
-    ZIO.ifZIO(files.exists(path).orDie)(
+    ZIO.ifZIO(doesFileExist(path))(
       for {
         maybeBasicFileAttributes <- files
           .getBasicFileAttributes(path)

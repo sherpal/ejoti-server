@@ -25,6 +25,7 @@ import scala.deriving.Mirror
 import scala.Tuple.Concat
 import ejoti.domain.Header.Headers
 import ejoti.domain.nodeast.filedownload.FileDownloadSharedResource
+import zio.ZLayer
 
 trait Node[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple] {
   self =>
@@ -225,6 +226,9 @@ trait Node[-R, X <: Tuple, Exit <: ExitType, IncomingInfo <: Tuple] {
     Exit,
     AdditionalInfo ::: IncomingInfo
   ] = ProvidedNode(this)
+
+  final def provideSomeLayer[R0]: NodeSomeLayerProvided.NodeSomeLayerProvider[R0, R, X, Exit, IncomingInfo] =
+    NodeSomeLayerProvided.NodeSomeLayerProvider(this)
 
 }
 

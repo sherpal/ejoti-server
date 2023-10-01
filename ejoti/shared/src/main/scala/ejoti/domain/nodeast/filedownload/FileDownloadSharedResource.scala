@@ -17,11 +17,13 @@ object FileDownloadSharedResource {
     semaphore <- Semaphore.make(1)
   } yield new FileDownloadSharedResource {
     def acquire: ZIO[Any, Nothing, Unit] = semaphore.withPermit(for {
-      _ <- theRef.get.map(_ > 0).repeatUntil(identity)
+      _ <- theRef.get.map(_ > 0).repeat(Schedule.recurUntil(identity) && Schedule.exponential(1.millis, 0.2))
       _ <- theRef.update(_ - 1)
     } yield ())
 
-    def release: ZIO[Any, Nothing, Unit] = theRef.update(_ + 1)
+    def release: ZIO[Any, Nothing, Unit] = for {
+      _ <- theRef.update(_ + 1)
+    } yield ()
   })
 
   def unlimited: ZLayer[Any, Nothing, FileDownloadSharedResource] = ZLayer.succeed(new FileDownloadSharedResource {
