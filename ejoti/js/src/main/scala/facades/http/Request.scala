@@ -3,7 +3,7 @@ package facades.http
 import ejoti.domain.Header
 import urldsl.url.UrlStringParserGenerator
 import zio.stream.ZStream
-import zio.{Chunk, ZIO}
+import zio.*
 
 import scala.scalajs.js
 import scala.scalajs.js.typedarray.Uint8Array
@@ -48,7 +48,15 @@ object Request {
       queue   <- zio.Queue.unbounded[Chunk[Byte]]
       runtime <- ZIO.runtime[Any]
       _       <- ZIO.succeed(req.onChunk(chunk => runtime.unsafe.run(queue.offer(chunk))))
-      _ <- ZIO.succeed(req.onEnd(runtime.unsafe.runToFuture(queue.isEmpty.repeatUntil(identity) *> queue.shutdown)))
+      _ <- ZIO.succeed(
+        req.onEnd(
+          runtime.unsafe.runToFuture(
+            queue.isEmpty.repeat(
+              Schedule.recurUntil(identity) && Schedule.exponential(1.millis, 0.2)
+            ) *> queue.shutdown
+          )
+        )
+      )
     } yield zio.stream.ZStream.fromChunkQueue(queue)
 
     def toEjotiRequest: ZIO[Any, Nothing, ejoti.domain.Request.RawRequest] = for {
