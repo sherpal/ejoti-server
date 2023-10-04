@@ -36,7 +36,7 @@ object Http {
           request  <- jsRequest.toEjotiRequest
           response <- handler(request)
           _        <- handleNodeResponseFromEjotiResponse(jsResponse, response)
-          //_        <- request.body.runDrain
+          _        <- request.body.runDrain
         } yield ()).catchAllCause { (cause: Cause[Throwable]) =>
           ZIO.succeed {
             val message = cause.prettyPrint

@@ -52,7 +52,7 @@ object Request {
         req.onEnd(
           runtime.unsafe.runToFuture(
             queue.isEmpty.repeat(
-              Schedule.recurUntil(identity) && Schedule.exponential(1.millis, 0.2)
+              Schedule.recurUntil[Boolean, Boolean] { case true => true } && Schedule.exponential(1.millis, 0.2)
             ) *> queue.shutdown
           )
         )
