@@ -17,7 +17,9 @@ object FileDownloadSharedResource {
     semaphore <- Semaphore.make(1)
   } yield new FileDownloadSharedResource {
     def acquire: ZIO[Any, Nothing, Unit] = semaphore.withPermit(for {
-      _ <- theRef.get.map(_ > 0).repeat(Schedule.recurUntil(identity) && Schedule.exponential(1.millis, 0.2))
+      _ <- theRef.get
+        .map(_ > 0)
+        .repeat(Schedule.recurUntil[Boolean, Boolean] { case true => true } && Schedule.exponential(1.millis, 0.2))
       _ <- theRef.update(_ - 1)
     } yield ())
 
